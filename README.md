@@ -6,6 +6,10 @@
 
 AI Image Workbench · 基于 Vertex Ultra V3.1 版本整理
 
+## 效果展示
+
+![AI 图片工作台运行效果：连接设置、多图参考与图片生成结果](docs/screenshot.png)
+
 ## 功能特点
 
 | 功能 | 说明 |
@@ -114,7 +118,9 @@ Gemini / Vertex 的单任务图片数量在当前项目中固定为 1；需要�
 ai-image-workbench/
 ├── index.html    # 工作台界面、样式与逻辑
 ├── README.md     # 项目介绍与使用说明
-└── .gitignore    # 本地配置与临时文件排除规则
+├── .gitignore    # 本地配置与临时文件排除规则
+└── docs/
+    └── screenshot.png  # 工作台效果图
 ```
 
 ## 当前验证范围
