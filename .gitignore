@@ -1,0 +1,31 @@
+# API credentials and private local configuration
+.env
+.env.*
+!.env.example
+credentials.json
+secrets.json
+*.pem
+*.key
+config.local.*
+*.local.json
+
+# Local image results and exports
+/generated/
+/downloads/
+/exports/
+*.zip
+
+# Logs and temporary files
+*.log
+*.tmp
+*.bak
+*~
+
+# Editor, operating system and local tooling files
+.DS_Store
+Thumbs.db
+Desktop.ini
+.vscode/
+.idea/
+node_modules/
+__pycache__/

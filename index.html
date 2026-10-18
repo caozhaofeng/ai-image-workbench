@@ -1,0 +1,3715 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AI 图片工作台 · Vertex Ultra V3.1</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <style>
+    :root {
+      color-scheme: dark;
+      --header-h: 78px;
+      --sidebar-expanded-w: 360px;
+      --sidebar-w: var(--sidebar-expanded-w);
+    }
+    body.sidebar-collapsed {
+      --sidebar-w: 0px;
+    }
+    html, body { height: 100%; }
+    body {
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #020817;
+    }
+    .glass {
+      background: linear-gradient(180deg, rgba(15,23,42,.86), rgba(2,6,23,.92));
+      backdrop-filter: blur(18px);
+      border: 1px solid rgba(71,85,105,.45);
+      box-shadow: 0 12px 42px rgba(0,0,0,.28);
+    }
+    .input {
+      background: rgba(15,23,42,.88);
+      border: 1px solid rgba(71,85,105,.65);
+      color: #e2e8f0;
+      transition: border-color .16s ease, box-shadow .16s ease, background .16s ease;
+    }
+    .input:focus {
+      outline: none;
+      border-color: rgba(96,165,250,.92);
+      box-shadow: 0 0 0 3px rgba(59,130,246,.16);
+      background: rgba(15,23,42,.96);
+    }
+    .btn {
+      transition: transform .08s ease, background .2s ease, border-color .2s ease, color .2s ease, opacity .2s ease;
+    }
+    .btn:active { transform: scale(.985); }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; }
+    .scroll-y::-webkit-scrollbar, .scroll-x::-webkit-scrollbar, pre::-webkit-scrollbar { width: 8px; height: 8px; }
+    .scroll-y::-webkit-scrollbar-thumb, .scroll-x::-webkit-scrollbar-thumb, pre::-webkit-scrollbar-thumb { background: rgba(100,116,139,.72); border-radius: 999px; }
+    .api-toggle.active {
+      background: linear-gradient(90deg, rgba(59,130,246,.95), rgba(79,70,229,.95));
+      color: white;
+      border-color: rgba(96,165,250,.85);
+      box-shadow: 0 0 0 1px rgba(96,165,250,.32) inset;
+    }
+    .drop-active {
+      border-color: rgba(96,165,250,1) !important;
+      background: rgba(29,78,216,.18) !important;
+    }
+    .ref-preview-card {
+      cursor: grab;
+      user-select: none;
+    }
+    .ref-preview-card:active {
+      cursor: grabbing;
+    }
+    .ref-preview-card.dragging {
+      opacity: .46;
+      transform: scale(.985);
+    }
+    .ref-preview-card.drag-over-before {
+      box-shadow: -4px 0 0 rgba(96,165,250,.95), 0 0 0 1px rgba(96,165,250,.35) inset;
+    }
+    .ref-preview-card.drag-over-after {
+      box-shadow: 4px 0 0 rgba(96,165,250,.95), 0 0 0 1px rgba(96,165,250,.35) inset;
+    }
+    .app-shell {
+      display: grid;
+      grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
+      min-height: calc(100vh - var(--header-h));
+      transition: grid-template-columns .24s ease;
+    }
+    .side-panel {
+      width: var(--sidebar-w);
+      height: calc(100vh - var(--header-h));
+      overflow: hidden;
+      transition: width .24s ease, border-color .24s ease;
+      border-right: 1px solid rgba(30,41,59,.9);
+    }
+    body.sidebar-collapsed .side-panel {
+      border-right-color: transparent;
+    }
+    .sidebar-inner {
+      width: var(--sidebar-expanded-w);
+      height: 100%;
+      overflow-y: auto;
+      overflow-x: hidden;
+    }
+    .sidebar-peek-btn {
+      position: fixed;
+      left: 12px;
+      top: calc(var(--header-h) + 12px);
+      z-index: 50;
+      display: none;
+    }
+    body.sidebar-collapsed .sidebar-peek-btn {
+      display: inline-flex;
+    }
+    .workspace-grid {
+      display: grid;
+      grid-template-columns: minmax(320px, 1fr) minmax(0, 2fr);
+      gap: 16px;
+      align-items: start;
+    }
+    .control-panel {
+      position: sticky;
+      top: 16px;
+    }
+    .results-panel {
+      min-width: 0;
+    }
+    .task-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(min(100%, 360px), 1fr));
+      gap: 16px;
+    }
+    @media (max-width: 1180px) {
+      .workspace-grid {
+        grid-template-columns: 1fr;
+      }
+      .control-panel {
+        position: static;
+      }
+    }
+    @media (max-width: 900px) {
+      :root {
+        --sidebar-expanded-w: min(86vw, 360px);
+      }
+    }
+    @media (max-width: 640px) {
+      .task-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body class="min-h-screen text-slate-100 selection:bg-blue-500/30">
+  <div class="fixed inset-0 -z-10 bg-[radial-gradient(circle_at_top_left,rgba(37,99,235,.22),transparent_24%),radial-gradient(circle_at_top_right,rgba(59,130,246,.12),transparent_22%),radial-gradient(circle_at_bottom_right,rgba(168,85,247,.13),transparent_28%)]"></div>
+
+  <header class="sticky top-0 z-40 border-b border-slate-800/90 bg-slate-950/88 backdrop-blur-xl">
+    <div class="flex h-[var(--header-h)] items-center justify-between gap-3 px-4 md:px-6">
+      <div class="min-w-0">
+        <div class="flex items-center gap-2">
+          <h1 class="truncate text-xl font-semibold tracking-tight md:text-2xl">AI 图片工作台 · Vertex Ultra V3.1</h1>
+          <span class="rounded-md border border-slate-700 bg-slate-900/80 px-2 py-0.5 text-[10px] text-blue-300">OpenAI / Gemini / Vertex · V3</span>
+        </div>
+      </div>
+      <div class="flex shrink-0 items-center gap-2">
+        <span id="endpointBadge" class="hidden max-w-[52vw] truncate rounded-full border border-slate-700 bg-slate-900/80 px-3 py-2 text-[11px] text-slate-300 md:block mono">POST ...</span>
+        <button id="saveBtn" class="btn rounded-xl border border-blue-500/40 bg-blue-600/12 px-4 py-2 text-sm font-medium text-blue-200 hover:bg-blue-600/20">立即保存</button>
+      </div>
+    </div>
+  </header>
+
+  <button id="sidebarPeekBtn" class="sidebar-peek-btn btn rounded-xl border border-blue-500/45 bg-blue-600/95 px-3 py-2 text-xs font-semibold text-white shadow-xl shadow-blue-950/40 hover:bg-blue-500" title="展开左侧参数栏">参数</button>
+
+  <main class="app-shell">
+    <aside id="settingsSidebar" class="side-panel scroll-y">
+      <div class="sidebar-inner">
+        <div class="space-y-4 p-4 md:p-5">
+        <section class="glass rounded-2xl p-4">
+          <div class="mb-3 flex items-center justify-between">
+            <h2 class="text-base font-semibold">连接设置</h2>
+            <button id="sidebarToggleBtn" class="btn rounded-xl border border-slate-700 bg-slate-900/80 px-3 py-1.5 text-[11px] font-medium text-slate-300 hover:bg-slate-800" title="收起左侧参数栏">隐藏参数</button>
+          </div>
+          <div class="space-y-3">
+            <div>
+              <div class="mb-2 text-xs text-slate-400">API 格式</div>
+              <div class="grid grid-cols-3 gap-2">
+                <button id="fmtGemini" class="api-toggle btn rounded-xl border border-slate-700 bg-slate-900/80 px-2 py-2 text-sm text-slate-200">Gemini</button>
+                <button id="fmtOpenAI" class="api-toggle active btn rounded-xl border border-slate-700 bg-slate-900/80 px-2 py-2 text-sm text-slate-200">OpenAI</button>
+                <button id="fmtVertex" class="api-toggle btn rounded-xl border border-slate-700 bg-slate-900/80 px-2 py-2 text-sm text-slate-200">Vertex</button>
+              </div>
+            </div>
+            <label class="block text-xs text-slate-400">Base URL
+              <input id="baseUrl" class="input mt-1 w-full rounded-xl px-3 py-2 text-xs mono" value="https://api.openai.com" autocomplete="off" />
+            </label>
+            <label class="block text-xs text-slate-400">API 版本
+              <input id="apiVersion" class="input mt-1 w-full rounded-xl px-3 py-2 text-xs mono" value="v1" autocomplete="off" />
+            </label>
+            <label class="block text-xs text-slate-400">接口模式
+              <select id="apiMode" class="input mt-1 w-full rounded-xl px-3 py-2 text-xs mono">
+                <option value="image" selected>Images API · /images/generations 或 /images/edits</option>
+                <option value="chat">Chat Completions · /chat/completions</option>
+                <option value="gemini">GenerateContent · /models/{model}:generateContent</option>
+                <option value="vertex">Agent Platform Express · /publishers/google/models/{model}:generateContent</option>
+              </select>
+            </label>
+            <p id="providerEndpointHint" class="hidden rounded-xl border border-slate-700 bg-slate-900/60 px-3 py-2 text-xs leading-5 text-slate-400"></p>
+            <label id="chatExtraWrap" class="flex items-start gap-2 rounded-xl border border-slate-700 bg-slate-900/60 p-3 text-xs text-slate-300">
+              <input id="chatExtraParams" type="checkbox" class="mt-0.5 accent-blue-500" checked />
+              <span>Chat 模式附加图片参数：size / quality / output_format / background。若你的网关报“unknown parameter”，关闭它再试。</span>
+            </label>
+            <label class="block text-xs text-slate-400"><span id="apiKeyLabel">OpenAI API Key</span>
+              <div class="mt-1 flex gap-2">
+                <input id="apiKey" class="input w-full rounded-xl px-3 py-2 text-xs mono" type="password" placeholder="sk-..." autocomplete="off" />
+                <button id="showKeyBtn" class="btn rounded-xl border border-slate-700 bg-slate-900 px-3 text-xs hover:bg-slate-800">显示</button>
+              </div>
+            </label>
+            <label id="vertexKeysWrap" class="hidden block text-xs text-slate-400">Vertex Keys（KEY|PROJECT_ID，每行一个）
+              <textarea id="vertexKeys" class="input mt-1 min-h-[78px] w-full resize-y rounded-xl px-3 py-2 text-[11px] mono" placeholder="AQ...|my-project-id&#10;AQ...|another-project-id" autocomplete="off" spellcheck="false"></textarea>
+              <span id="vertexKeysHint" class="mt-1 block text-[11px] leading-5 text-slate-500">配置 Project ID 后使用项目级 Vertex 流式通道，并按任务/重试顺序轮询；RAW 日志不会记录 Key。</span>
+            </label>
+            <button id="resetOfficialBtn" class="btn w-full rounded-xl border border-slate-700 bg-slate-900/80 px-3 py-2 text-xs text-slate-300 hover:bg-slate-800">恢复当前服务商官方地址与接口</button>
+            <p class="rounded-xl border border-emerald-500/25 bg-emerald-500/10 p-3 text-[11px] leading-relaxed text-emerald-100">Base URL、API 版本、模型、API Key、Vertex 密钥池和文件名前缀会自动保存在当前浏览器，不会写入此 HTML 文件；分享文件不会带出这些数据。</p>
+            <p class="rounded-xl border border-amber-500/25 bg-amber-500/10 p-3 text-[11px] leading-relaxed text-amber-100">API Key 与 Vertex 密钥池在浏览器本地以明文保存，并会用于前端请求。仅建议在自己的设备上使用；正式环境请使用后端代理。RAW 日志会自动脱敏。</p>
+          </div>
+        </section>
+
+        <section class="glass rounded-2xl p-4">
+          <h2 class="mb-3 text-base font-semibold">模型与输出</h2>
+          <div class="space-y-3">
+            <label class="block text-xs text-slate-400">主流模型预设
+              <select id="modelPreset" class="input mt-1 w-full rounded-xl px-3 py-2 text-xs"></select>
+            </label>
+            <label class="block text-xs text-slate-400">模型 ID（可自行输入）
+              <input id="model" list="modelList" class="input mt-1 w-full rounded-xl px-3 py-2 text-xs mono" value="gpt-image-2" autocomplete="off" spellcheck="false" />
+              <datalist id="modelList"></datalist>
+            </label>
+            <div id="modelHint" class="rounded-xl border border-slate-700 bg-slate-900/60 px-3 py-2 text-[11px] leading-relaxed text-slate-400"></div>
+            <div class="grid grid-cols-2 gap-3">
+              <label class="block text-xs text-slate-400"><span id="qualityLabel">质量</span>
+                <select id="quality" class="input mt-1 w-full rounded-xl px-3 py-2 text-xs">
+                  <option value="auto">auto · 自动平衡</option>
+                  <option value="low">low · 更快 / 更省</option>
+                  <option value="medium">medium · 均衡</option>
+                  <option value="high">high · 更细致 / 更慢</option>
+                </select>
+              </label>
+              <label class="block text-xs text-slate-400"><span id="requestCountLabel">单任务出图数</span>
+                <input id="n" class="input mt-1 w-full rounded-xl px-3 py-2 text-xs" type="number" min="1" max="10" value="1" />
+              </label>
+            </div>
+            <div id="qualityHint" class="rounded-xl border border-slate-700 bg-slate-900/60 px-3 py-2 text-[11px] leading-relaxed text-slate-400">OpenAI Images API 会发送 quality 参数。</div>
+            <div class="space-y-3 rounded-2xl border border-blue-500/30 bg-blue-500/10 p-3">
+              <div class="flex items-center justify-between gap-3">
+                <span class="text-xs font-semibold text-blue-100">批量任务设置</span>
+                <span class="text-[10px] text-blue-200/70">所有模型均可调</span>
+              </div>
+              <div class="grid grid-cols-2 gap-3">
+                <label class="block text-xs text-slate-300">生成任务数（总请求数）
+                  <input id="taskCount" class="input mt-1 w-full rounded-xl px-3 py-2 text-xs" type="number" min="1" max="100" step="1" value="1" />
+                </label>
+                <label class="block text-xs text-slate-300">最大并发（同时请求数）
+                  <input id="parallelCount" class="input mt-1 w-full rounded-xl px-3 py-2 text-xs" type="number" min="1" max="20" step="1" value="1" />
+                </label>
+              </div>
+              <div class="text-[11px] leading-relaxed text-blue-100/75">例：任务数 3、并发 3＝同时发送 3 个独立请求；任务数 3、并发 1＝依次发送 3 次。Gemini / Vertex 每个任务固定返回 1 张，但生成任务数仍可自由调整。</div>
+              <div class="grid grid-cols-2 gap-3">
+                <label class="block text-xs text-slate-300">单任务超时（秒）
+                  <input id="requestTimeout" class="input mt-1 w-full rounded-xl px-3 py-2 text-xs" type="number" min="30" max="1800" step="30" value="360" />
+                </label>
+                <label class="block text-xs text-slate-300">输出格式
+                  <select id="outputFormat" class="input mt-1 w-full rounded-xl px-3 py-2 text-xs">
+                    <option value="png">png</option>
+                    <option value="webp">webp</option>
+                    <option value="jpeg">jpeg</option>
+                  </select>
+                </label>
+              </div>
+            </div>
+            <label class="block text-xs text-slate-400">尺寸
+              <select id="size" class="input mt-1 w-full rounded-xl px-3 py-2 text-xs mono">
+                <option value="auto">auto · 自动</option>
+                <option value="custom">自定义…</option>
+                <option value="" disabled>──────── 1K ────────</option>
+                <option value="1024x1024">1024x1024 · 1:1 · 1K</option>
+                <option value="1536x1024">1536x1024 · 横图 · 1K+</option>
+                <option value="1024x1536">1024x1536 · 竖图 · 1K+</option>
+                <option value="" disabled>──────── 2K ────────</option>
+                <option value="2048x2048">2048x2048 · 方图 · 2K</option>
+                <option value="2048x1152">2048x1152 · 16:9 · 2K</option>
+                <option value="1152x2048">1152x2048 · 9:16 · 2K</option>
+                <option value="" disabled>──────── 4K ────────</option>
+                <option value="4096x4096">4096x4096 · 方图 · 4K</option>
+                <option value="4096x2304">4096x2304 · 16:9 · 4K</option>
+                <option value="2304x4096">2304x4096 · 9:16 · 4K</option>
+              </select>
+            </label>
+            <div id="sizeHint" class="mt-1 text-[11px] text-slate-500">OpenAI 会发送宽×高；选择 1K / 2K / 4K 只是快捷填入尺寸。</div>
+            <div id="customSizeWrap" class="grid grid-cols-2 gap-3">
+              <label class="block text-xs text-slate-400">宽度
+                <input id="customW" class="input mt-1 w-full rounded-xl px-3 py-2 text-xs" type="number" step="16" min="256" max="4096" value="1536" />
+              </label>
+              <label class="block text-xs text-slate-400">高度
+                <input id="customH" class="input mt-1 w-full rounded-xl px-3 py-2 text-xs" type="number" step="16" min="256" max="4096" value="864" />
+              </label>
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+              <label class="block text-xs text-slate-400">压缩率
+                <input id="compression" class="input mt-1 w-full rounded-xl px-3 py-2 text-xs" type="number" min="0" max="100" value="92" />
+              </label>
+              <label class="block text-xs text-slate-400">背景
+                <select id="background" class="input mt-1 w-full rounded-xl px-3 py-2 text-xs">
+                  <option value="auto">auto</option>
+                  <option value="opaque">opaque</option>
+                </select>
+              </label>
+            </div>
+            <label class="flex items-start gap-2 rounded-xl border border-slate-700 bg-slate-900/60 p-3 text-xs text-slate-300">
+              <input id="stream" type="checkbox" class="mt-0.5 accent-blue-500" />
+              <span>启用流式预览（实验）。OpenAI Chat 模式下有些网关不支持 SSE；Gemini / Images API 遇到不支持时会自动回退或报错。</span>
+            </label>
+          </div>
+        </section>
+
+        <section class="glass rounded-2xl p-4">
+          <h2 class="mb-3 text-base font-semibold">上传优化</h2>
+          <div class="space-y-3">
+            <label class="flex items-start gap-2 rounded-xl border border-slate-700 bg-slate-900/60 p-3 text-xs text-slate-300">
+              <input id="optimizeInput" type="checkbox" class="mt-0.5 accent-blue-500" />
+              <span>发送前压缩参考图，适合网络慢或大图。追求最高细节时建议关闭。</span>
+            </label>
+            <div class="grid grid-cols-2 gap-3">
+              <label class="block text-xs text-slate-400">最长边
+                <select id="maxEdge" class="input mt-1 w-full rounded-xl px-3 py-2 text-xs">
+                  <option value="1600">1600</option>
+                  <option value="2048" selected>2048</option>
+                  <option value="3072">3072</option>
+                  <option value="4096">4096</option>
+                </select>
+              </label>
+              <label class="block text-xs text-slate-400">质量
+                <input id="inputQuality" class="input mt-1 w-full rounded-xl px-3 py-2 text-xs" type="number" min="60" max="100" value="92" />
+              </label>
+            </div>
+            <label id="mediaResolutionWrap" class="block text-xs text-slate-400">参考图解析精度（Gemini / Vertex）
+              <select id="mediaResolution" class="input mt-1 w-full rounded-xl px-3 py-2 text-xs">
+                <option value="auto">自动 · 由模型决定</option>
+                <option value="low">低 · 节省输入解析</option>
+                <option value="medium">中 · 平衡解析</option>
+                <option value="high">高 · 高细节解析</option>
+                <option value="ultra" selected>超高 · Part 级最高解析（细节优先）</option>
+              </select>
+              <span id="mediaResolutionHint" class="mt-1 block leading-relaxed text-slate-500">控制模型读取参考图的细节精度，与输出图片的 1K / 2K / 4K 分辨率无关。超高档使用每张图片 Part 的 MEDIA_RESOLUTION_ULTRA_HIGH；模型仍会按自身规格决定实际图像 Token。Gemini 3 Pro Image 官方规格为每张输入图 560 个输入图像 Token。追求最高细节时请保持“发送前压缩参考图”关闭。</span>
+            </label>
+          </div>
+        </section>
+
+        <section class="glass rounded-2xl p-4">
+          <h2 class="mb-3 text-base font-semibold">本地保存</h2>
+          <div class="space-y-3">
+            <label class="flex items-start gap-2 rounded-xl border border-slate-700 bg-slate-900/60 p-3 text-xs text-slate-300">
+              <input id="autoSaveImages" type="checkbox" class="mt-0.5 accent-blue-500" />
+              <span>生成成功后自动把原图保存到所选文件夹；历史记录仍会保留缩略图和原图缓存。</span>
+            </label>
+            <label class="block text-xs text-slate-400">文件名前缀（OpenAI / Gemini / Vertex 独立记忆）
+              <input id="saveNamePrefix" class="input mt-1 w-full rounded-xl px-3 py-2 text-xs mono" value="gpt" autocomplete="off" />
+            </label>
+            <div class="rounded-xl border border-slate-700 bg-slate-900/60 p-3">
+              <div class="mb-2 text-xs text-slate-400">保存图片文件夹</div>
+              <div id="saveDirStatus" class="mb-3 truncate rounded-lg border border-slate-800 bg-slate-950/70 px-2.5 py-2 text-[11px] text-slate-300 mono">未选择文件夹</div>
+              <div class="flex flex-wrap gap-2">
+                <button id="chooseSaveDirBtn" class="btn rounded-xl border border-blue-500/40 bg-blue-600/12 px-3 py-2 text-xs font-medium text-blue-200 hover:bg-blue-600/20">选择文件夹</button>
+                <button id="checkSaveDirBtn" class="btn rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-xs hover:bg-slate-800">检查权限</button>
+                <button id="clearSaveDirBtn" class="btn rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-xs hover:bg-slate-800">清除授权</button>
+              </div>
+            </div>
+            <p class="rounded-xl border border-amber-500/25 bg-amber-500/10 p-3 text-[11px] leading-relaxed text-amber-100">浏览器安全限制下，网页不能直接填写或读取 D:\ 这类完整路径。Chrome / Edge 可通过“选择文件夹”授权写入；不支持时请使用单图下载或 ZIP 下载。</p>
+          </div>
+        </section>
+        </div>
+      </div>
+    </aside>
+
+    <section class="scroll-y min-h-0" style="height: calc(100vh - var(--header-h)); overflow-y:auto;">
+      <div class="workspace-grid p-4 md:p-5">
+        <section class="control-panel glass rounded-2xl p-4 md:p-5">
+          <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h2 class="text-base font-semibold">提示词与图片</h2>
+            </div>
+            <div class="flex flex-wrap gap-2">
+              <button id="sampleBtn" class="btn rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-xs hover:bg-slate-800">示例提示词</button>
+              <button id="clearImagesBtn" class="btn rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-xs hover:bg-slate-800">清空图片</button>
+            </div>
+          </div>
+          <textarea id="prompt" class="input min-h-[180px] w-full resize-y rounded-2xl px-4 py-3 text-sm leading-relaxed" placeholder="描述你想生成或编辑的图片。例如：参考上传图片中的人物与服装，保持同样风格，换成海边黄昏场景，电影感，高级商业海报，柔和光线，细节丰富。"></textarea>
+
+          <div id="dropZone" class="mt-4 rounded-2xl border-2 border-dashed border-slate-700 bg-slate-900/50 p-5 text-center">
+            <input id="fileInput" class="hidden" type="file" accept="image/*" multiple />
+            <div class="flex flex-wrap items-center justify-center gap-2">
+              <button id="pickBtn" class="btn rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500">选择图片</button>
+              <span class="rounded-lg border border-slate-700 bg-slate-900/70 px-2.5 py-1 text-[11px] text-slate-300">最多 16 张参考图</span>
+            </div>
+            <p class="mt-2 text-xs text-slate-400">也可以直接拖拽或按 <span class="mono text-blue-300">Ctrl+V</span> 粘贴图片。</p>
+            <div id="previewGrid" class="scroll-x mt-4 flex gap-3 overflow-x-auto pb-1"></div>
+          </div>
+
+          <div class="mt-4 flex flex-wrap items-center gap-3">
+            <button id="runBtn" class="btn rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-blue-950/40 hover:from-blue-500 hover:to-indigo-500">开始生成</button>
+            <button id="stopBtn" class="btn hidden rounded-2xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm font-semibold text-red-200 hover:bg-red-500/20">停止全部</button>
+            <span id="status" class="text-xs text-slate-400">就绪</span>
+          </div>
+        </section>
+
+        <section class="results-panel min-w-0">
+          <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h2 class="text-base font-semibold">并发结果</h2>
+              <p class="mt-1 text-xs text-slate-500">输出区占右侧约三分之二宽度，卡片会随浏览器大小自动排布。</p>
+              <p id="queueSummary" class="mt-1 text-xs text-blue-300 mono">队列 0 · 运行 0 · 成功 0 · 失败 0</p>
+            </div>
+            <div class="flex flex-wrap gap-2">
+              <button id="pauseQueueBtn" class="btn rounded-xl border border-amber-500/35 bg-amber-500/10 px-4 py-2 text-xs font-medium text-amber-100 hover:bg-amber-500/18">暂停队列</button>
+              <button id="cancelQueuedBtn" class="btn rounded-xl border border-red-500/35 bg-red-500/10 px-4 py-2 text-xs font-medium text-red-100 hover:bg-red-500/18">取消排队</button>
+              <button id="downloadAllBtn" class="btn rounded-xl border border-slate-700 bg-slate-900 px-4 py-2 text-xs font-medium text-slate-100 hover:bg-slate-800">下载全部 ZIP</button>
+              <button id="trimHistoryBtn" class="btn rounded-xl border border-slate-700 bg-slate-900 px-4 py-2 text-xs hover:bg-slate-800" title="只保留最近 30 条记录，减少下次打开卡顿">清理旧记录</button>
+              <button id="clearResultsBtn" class="btn rounded-xl border border-slate-700 bg-slate-900 px-4 py-2 text-xs hover:bg-slate-800">清空结果</button>
+            </div>
+          </div>
+          <div id="taskGrid" class="task-grid"></div>
+        </section>
+      </div>
+    </section>
+  </main>
+
+  <template id="emptyTaskTpl">
+    <div class="glass col-span-full rounded-2xl border border-slate-800 p-8 text-center text-slate-500">
+      <div class="mb-3 text-4xl">🖼️</div>
+      <p class="text-sm">生成结果会显示在这里</p>
+    </div>
+  </template>
+
+  <div id="rawModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
+    <div class="glass flex h-[85vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl">
+      <div class="flex items-center justify-between border-b border-slate-800 px-4 py-3">
+        <div>
+          <div class="text-sm font-semibold">原始数据</div>
+          <div id="rawModalTitle" class="mt-1 text-[11px] text-slate-500 mono">Task</div>
+        </div>
+        <div class="flex gap-2">
+          <button id="copyRawBtn" class="btn rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-xs hover:bg-slate-800">复制</button>
+          <button id="closeRawBtn" class="btn rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-xs hover:bg-slate-800">关闭</button>
+        </div>
+      </div>
+      <div id="rawDiagWrap" class="border-b border-slate-800 bg-slate-950/40 px-4 py-3">
+        <div class="mb-1 text-[11px] font-semibold uppercase tracking-wider text-amber-300">诊断信息</div>
+        <div id="rawDiag" class="space-y-1 text-xs leading-6 text-slate-300">暂无诊断信息</div>
+      </div>
+      <div class="grid min-h-0 flex-1 gap-0 md:grid-cols-2">
+        <div class="flex min-h-0 flex-col border-b border-slate-800 md:border-b-0 md:border-r">
+          <div class="border-b border-slate-800 px-4 py-2 text-xs font-semibold uppercase tracking-wider text-blue-300">Request</div>
+          <pre class="min-h-0 flex-1 overflow-auto bg-slate-950/70 p-4 text-[11px] leading-relaxed text-slate-300"><code id="rawReq"></code></pre>
+        </div>
+        <div class="flex min-h-0 flex-col">
+          <div class="border-b border-slate-800 px-4 py-2 text-xs font-semibold uppercase tracking-wider text-emerald-300">Response</div>
+          <pre class="min-h-0 flex-1 overflow-auto bg-slate-950/70 p-4 text-[11px] leading-relaxed text-slate-300"><code id="rawRes"></code></pre>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+  <div id="imageViewerModal" class="fixed inset-0 z-[60] hidden bg-black/88 backdrop-blur-sm">
+    <div class="flex h-full w-full flex-col">
+      <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 bg-slate-950/90 px-4 py-3">
+        <div class="min-w-0">
+          <div id="viewerTitle" class="truncate text-sm font-semibold text-slate-100">图片预览</div>
+          <div id="viewerMeta" class="mt-1 text-[11px] text-slate-400 mono">原始尺寸：读取中</div>
+        </div>
+        <div class="flex flex-wrap items-center gap-2">
+          <button id="viewerPrevBtn" class="btn rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-xs hover:bg-slate-800">上一张</button>
+          <button id="viewerNextBtn" class="btn rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-xs hover:bg-slate-800">下一张</button>
+          <div class="flex overflow-hidden rounded-xl border border-slate-700 bg-slate-900" title="上下滚动预览区域">
+            <button id="viewerScrollUpBtn" class="btn border-r border-slate-700 px-3 py-2 text-xs hover:bg-slate-800">上滚</button>
+            <button id="viewerScrollDownBtn" class="btn px-3 py-2 text-xs hover:bg-slate-800">下滚</button>
+          </div>
+          <div class="flex overflow-hidden rounded-xl border border-slate-700 bg-slate-900">
+            <button id="viewerZoomOutBtn" class="btn border-r border-slate-700 px-3 py-2 text-xs hover:bg-slate-800">缩小</button>
+            <button id="viewerZoomInBtn" class="btn border-r border-slate-700 px-3 py-2 text-xs hover:bg-slate-800">放大</button>
+            <span id="viewerZoomText" class="min-w-[64px] px-3 py-2 text-center text-xs text-blue-200 mono">100%</span>
+          </div>
+          <button id="viewerZoomResetBtn" class="btn rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-xs hover:bg-slate-800">适应</button>
+          <button id="viewerCopyBtn" class="btn rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-xs hover:bg-slate-800">复制</button>
+          <button id="viewerDownloadBtn" class="btn rounded-xl bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-500">下载</button>
+          <button id="viewerCloseBtn" class="btn rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-xs hover:bg-slate-800">关闭</button>
+        </div>
+      </div>
+      <div id="viewerStage" class="min-h-0 flex-1 overflow-auto bg-black/20" title="滚轮缩放；点击预览区关闭；↑/↓ 或上滚/下滚按钮滚动预览区域；←/→ 切换">
+        <div id="viewerCanvas" class="min-h-full min-w-full p-4">
+          <img id="viewerImage" class="block max-h-none max-w-none select-none rounded-lg border border-slate-800 bg-slate-950 shadow-2xl transition-[width] duration-75" alt="large preview" />
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const els = {
+      endpointBadge: $('endpointBadge'), saveBtn: $('saveBtn'), sidebarToggleBtn: $('sidebarToggleBtn'), sidebarPeekBtn: $('sidebarPeekBtn'), settingsSidebar: $('settingsSidebar'),
+      fmtOpenAI: $('fmtOpenAI'), fmtGemini: $('fmtGemini'), fmtVertex: $('fmtVertex'), baseUrl: $('baseUrl'), apiVersion: $('apiVersion'), apiMode: $('apiMode'), providerEndpointHint: $('providerEndpointHint'), chatExtraParams: $('chatExtraParams'), chatExtraWrap: $('chatExtraWrap'), apiKey: $('apiKey'), apiKeyLabel: $('apiKeyLabel'), showKeyBtn: $('showKeyBtn'), vertexKeysWrap: $('vertexKeysWrap'), vertexKeys: $('vertexKeys'), vertexKeysHint: $('vertexKeysHint'), resetOfficialBtn: $('resetOfficialBtn'),
+      modelPreset: $('modelPreset'), model: $('model'), modelList: $('modelList'), modelHint: $('modelHint'), quality: $('quality'), qualityLabel: $('qualityLabel'), qualityHint: $('qualityHint'), n: $('n'), requestCountLabel: $('requestCountLabel'), taskCount: $('taskCount'), parallelCount: $('parallelCount'), requestTimeout: $('requestTimeout'), outputFormat: $('outputFormat'), size: $('size'), sizeHint: $('sizeHint'), customSizeWrap: $('customSizeWrap'), customW: $('customW'), customH: $('customH'), compression: $('compression'), background: $('background'), stream: $('stream'), optimizeInput: $('optimizeInput'), maxEdge: $('maxEdge'), inputQuality: $('inputQuality'), mediaResolutionWrap: $('mediaResolutionWrap'), mediaResolution: $('mediaResolution'), mediaResolutionHint: $('mediaResolutionHint'), autoSaveImages: $('autoSaveImages'), saveNamePrefix: $('saveNamePrefix'), saveDirStatus: $('saveDirStatus'), chooseSaveDirBtn: $('chooseSaveDirBtn'), checkSaveDirBtn: $('checkSaveDirBtn'), clearSaveDirBtn: $('clearSaveDirBtn'),
+      prompt: $('prompt'), dropZone: $('dropZone'), fileInput: $('fileInput'), pickBtn: $('pickBtn'), previewGrid: $('previewGrid'), sampleBtn: $('sampleBtn'), clearImagesBtn: $('clearImagesBtn'), clearResultsBtn: $('clearResultsBtn'),
+      runBtn: $('runBtn'), stopBtn: $('stopBtn'), status: $('status'), downloadAllBtn: $('downloadAllBtn'), trimHistoryBtn: $('trimHistoryBtn'), pauseQueueBtn: $('pauseQueueBtn'), cancelQueuedBtn: $('cancelQueuedBtn'),
+      taskGrid: $('taskGrid'), queueSummary: $('queueSummary'),
+      rawModal: $('rawModal'), rawModalTitle: $('rawModalTitle'), rawReq: $('rawReq'), rawRes: $('rawRes'), rawDiagWrap: $('rawDiagWrap'), rawDiag: $('rawDiag'), copyRawBtn: $('copyRawBtn'), closeRawBtn: $('closeRawBtn'),
+      imageViewerModal: $('imageViewerModal'), viewerTitle: $('viewerTitle'), viewerMeta: $('viewerMeta'), viewerStage: $('viewerStage'), viewerCanvas: $('viewerCanvas'), viewerImage: $('viewerImage'), viewerPrevBtn: $('viewerPrevBtn'), viewerNextBtn: $('viewerNextBtn'), viewerZoomOutBtn: $('viewerZoomOutBtn'), viewerZoomResetBtn: $('viewerZoomResetBtn'), viewerZoomInBtn: $('viewerZoomInBtn'), viewerZoomText: $('viewerZoomText'), viewerScrollUpBtn: $('viewerScrollUpBtn'), viewerScrollDownBtn: $('viewerScrollDownBtn'), viewerCopyBtn: $('viewerCopyBtn'), viewerDownloadBtn: $('viewerDownloadBtn'), viewerCloseBtn: $('viewerCloseBtn')
+    };
+
+    const APP_BUILD_ID = 'vertex-ultra-v3-20260728-task-clarity';
+    const SETTINGS_KEY = 'image_workbench_ui_settings_v3';
+    const DB_NAME = 'image_workbench_ui_db_vertex_v3';
+    const DB_VERSION = 2;
+    const STORE = 'snapshots';
+    const IMAGE_STORE = 'image_blobs';
+    const SNAPSHOT_KEY = 'main';
+    const SAVE_DIR_HANDLE_KEY = 'save_directory_handle_v1';
+    const RUNNING_STAGES = new Set(['queued', 'requesting', 'retry_wait', 'receiving', 'parsing']);
+    const DEFAULT_REQUEST_TIMEOUT_MS = 6 * 60 * 1000;
+    const MAX_429_RETRIES = 4;
+    const RETRY_BASE_DELAY_MS = 4000;
+    const RETRY_MAX_DELAY_MS = 60 * 1000;
+    const VERTEX_REQUEST_STAGGER_MS = 250;
+    const VERTEX_4_9_SAFETY_SETTINGS = [
+      { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' },
+      { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_NONE' },
+      { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_NONE' },
+      { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' }
+    ];
+    const MEDIA_RESOLUTION_VALUES = {
+      auto: '',
+      low: 'MEDIA_RESOLUTION_LOW',
+      medium: 'MEDIA_RESOLUTION_MEDIUM',
+      high: 'MEDIA_RESOLUTION_HIGH',
+      ultra: 'MEDIA_RESOLUTION_ULTRA_HIGH'
+    };
+    const MEDIA_RESOLUTION_LABELS = {
+      auto: '解析自动',
+      low: '解析低',
+      medium: '解析中',
+      high: '解析高',
+      ultra: '解析超高'
+    };
+    const INITIAL_RENDER_LIMIT = 24;
+    const RENDER_INCREMENT = 24;
+    const MAX_PERSISTED_TASKS = 120;
+    const RAW_TEXT_PREVIEW_LIMIT = 4000;
+    const LARGE_STRING_LIMIT = 1200;
+    const THUMB_MAX_EDGE = 520;
+    const PERSIST_DEBOUNCE_MS = 700;
+    const SETTINGS_SAVE_DEBOUNCE_MS = 350;
+    const CUSTOM_MODEL_VALUE = '__custom__';
+    const DEFAULT_CONNECTIONS = {
+      openai: { baseUrl: 'https://api.openai.com', apiVersion: 'v1', apiMode: 'image', apiKey: '' },
+      gemini: { baseUrl: 'https://generativelanguage.googleapis.com', apiVersion: 'v1beta', apiMode: 'gemini', apiKey: '' },
+      vertex: { baseUrl: 'https://aiplatform.googleapis.com', apiVersion: 'v1', apiMode: 'vertex', apiKey: '' }
+    };
+    const DEFAULT_MODELS = {
+      openai: 'gpt-image-2',
+      gemini: 'gemini-3.1-flash-image',
+      vertex: 'gemini-3.1-flash-image'
+    };
+    const DEFAULT_SAVE_PREFIXES = {
+      openai: 'gpt',
+      gemini: 'gemini',
+      vertex: 'vertex'
+    };
+    const MODEL_CATALOG = {
+      openai: [
+        { id: 'gpt-image-2', label: 'GPT Image 2 · 推荐', detail: 'OpenAI 当前主力图像生成与编辑模型。' },
+        { id: 'gpt-image-2-2026-04-21', label: 'GPT Image 2 · 固定版本', detail: '固定快照，适合需要结果风格稳定的任务。' },
+        { id: 'gpt-image-1.5', label: 'GPT Image 1.5 · 旧渠道兼容', detail: '上一代图像模型，保留给尚未升级的中转站。' },
+        { id: 'chatgpt-image-latest', label: 'ChatGPT Image · 兼容别名', detail: 'ChatGPT 图像模型兼容别名；API 新项目优先使用 GPT Image 2。' },
+        { id: 'gpt-image-1', label: 'GPT Image 1 · 旧渠道兼容', detail: '早期图像模型，仅建议在旧渠道需要时使用。' }
+      ],
+      gemini: [
+        { id: 'gemini-3.1-flash-image', label: 'Nano Banana 2 · 推荐', detail: '综合速度、质量和成本的主力模型，支持多参考图与最高 4K。' },
+        { id: 'gemini-3-pro-image', label: 'Nano Banana Pro（香蕉 Pro）· 最高质量', detail: '香蕉 Pro，适合复杂指令、专业设计、精确文字与最高 4K 输出。' },
+        { id: 'gemini-3.1-flash-lite-image', label: 'Nano Banana 2 Lite · 最快', detail: '低延迟、低成本版本，适合高频任务；官方仅支持 1K。' },
+        { id: 'gemini-2.5-flash-image', label: 'Nano Banana · 旧版稳定', detail: '上一代 Nano Banana，适合旧渠道；官方建议逐步迁移到新版。' }
+      ],
+      vertex: [
+        { id: 'gemini-3.1-flash-image', label: 'Vertex · Nano Banana 2', detail: 'Vertex / Agent Platform 图片主力模型，支持多参考图与最高 4K。' },
+        { id: 'gemini-3-pro-image', label: 'Vertex · Nano Banana Pro', detail: 'Vertex 高质量图片模型，适合复杂指令、精确文字与最高 4K 输出。' },
+        { id: 'gemini-3.1-flash-lite-image', label: 'Vertex · Nano Banana 2 Lite', detail: 'Vertex 低延迟版本；官方仅支持 1K。' },
+        { id: 'gemini-2.5-flash-image', label: 'Vertex · Nano Banana 旧版', detail: '上一代图片模型，保留给旧渠道兼容。' }
+      ]
+    };
+
+    let dbPromise = null;
+    const fileDataUrlCache = new WeakMap();
+    const optimizedFileCache = new WeakMap();
+    const taskStorageCache = new WeakMap();
+
+    const state = {
+      apiFormat: 'openai',
+      connectionByFormat: {
+        openai: { ...DEFAULT_CONNECTIONS.openai },
+        gemini: { ...DEFAULT_CONNECTIONS.gemini },
+        vertex: { ...DEFAULT_CONNECTIONS.vertex }
+      },
+      modelByFormat: { ...DEFAULT_MODELS },
+      savePrefixByFormat: { ...DEFAULT_SAVE_PREFIXES },
+      vertexKeysRaw: '',
+      vertexKeyIndex: 0,
+      files: [],
+      referenceFiles: [],
+      referenceDragIndex: null,
+      tasks: [],
+      activeRawTaskId: null,
+      controllerMap: new Map(),
+      nextTaskIndex: 1,
+      nextQueueSeq: 1,
+      queuePaused: false,
+      renderLimit: INITIAL_RENDER_LIMIT,
+      renderPending: false,
+      persistTimer: null,
+      persistInFlight: false,
+      persistAgain: false,
+      settingsSaveTimer: null,
+      saveDirHandle: null,
+      saveDirName: '',
+      viewer: { items: [], index: 0, zoom: 1, fitZoom: 1, scrollHoldDelay: null, scrollHoldTimer: null, objectUrl: '', loadSeq: 0 }
+    };
+
+    function pretty(obj) { return JSON.stringify(obj, null, 2); }
+    function escapeHtml(str) { return String(str).replace(/[&<>"]/g, s => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[s])); }
+    function formatBytes(bytes) {
+      if (!bytes) return '0 B';
+      const units = ['B','KB','MB','GB'];
+      const i = Math.min(units.length - 1, Math.floor(Math.log(bytes) / Math.log(1024)));
+      return `${(bytes / Math.pow(1024, i)).toFixed(i ? 1 : 0)} ${units[i]}`;
+    }
+    function dataUrlToBlob(dataUrl) {
+      const [meta, b64] = dataUrl.split(',');
+      const mime = (meta.match(/data:(.*?);base64/) || [])[1] || 'image/png';
+      const bin = atob(b64);
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      return new Blob([bytes], { type: mime });
+    }
+    function dataUrlToFile(dataUrl, name = 'image.png', type = '') {
+      const blob = dataUrlToBlob(dataUrl);
+      return new File([blob], name, { type: type || blob.type || 'image/png' });
+    }
+
+    function blobToDataUrl(blob) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onerror = () => reject(reader.error || new Error('Blob 读取失败'));
+        reader.onload = () => resolve(reader.result);
+        reader.readAsDataURL(blob);
+      });
+    }
+    function imageFormatFromType(type = '', fallback = 'png') {
+      const t = String(type || '').toLowerCase();
+      if (t.includes('jpeg') || t.includes('jpg')) return 'jpeg';
+      if (t.includes('webp')) return 'webp';
+      if (t.includes('png')) return 'png';
+      return fallback || 'png';
+    }
+    function imageDisplaySrc(item) {
+      return item?.thumbSrc || item?.src || '';
+    }
+    function sanitizeSensitiveString(value) {
+      return String(value ?? '')
+        .replace(/([?&](?:key|api[_-]?key|access[_-]?token)=)[^&#\s"']+/gi, '$1***')
+        .replace(/(\b(?:authorization|x-goog-api-key|api[_-]?key|access[_-]?token)\b\s*["']?\s*[:=]\s*["']?(?:Bearer\s+)?)[^\s,"'}]+/gi, '$1***')
+        .replace(/\bBearer\s+[A-Za-z0-9._~+\/-]{8,}/gi, 'Bearer ***')
+        .replace(/\b(?:sk-[A-Za-z0-9_-]{8,}|AIza[A-Za-z0-9_-]{8,}|AQ\.[A-Za-z0-9._-]{8,})\b/g, '***');
+    }
+    function redact(obj) {
+      const walk = (value) => {
+        if (value == null) return value;
+        if (Array.isArray(value)) return value.map(walk);
+        if (typeof value === 'object') {
+          const out = {};
+          Object.entries(value).forEach(([k, v]) => {
+            const normalizedKey = String(k).toLowerCase().replace(/[-_]/g, '');
+            if (['authorization', 'xgoogapikey', 'apikey', 'key', 'accesstoken', 'token', 'secret', 'vertexkeys', 'vertexkeysraw'].includes(normalizedKey)) {
+              out[k] = /^Bearer\s+/i.test(String(v || '')) ? 'Bearer ***' : '***';
+            } else {
+              out[k] = walk(v);
+            }
+          });
+          return out;
+        }
+        return typeof value === 'string' ? sanitizeSensitiveString(value) : value;
+      };
+      return walk(obj || {});
+    }
+
+    function getDb() {
+      if (dbPromise) return dbPromise;
+      dbPromise = new Promise((resolve, reject) => {
+        const req = indexedDB.open(DB_NAME, DB_VERSION);
+        req.onupgradeneeded = () => {
+          const db = req.result;
+          if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE);
+          if (!db.objectStoreNames.contains(IMAGE_STORE)) db.createObjectStore(IMAGE_STORE);
+        };
+        req.onsuccess = () => {
+          const db = req.result;
+          db.onversionchange = () => {
+            db.close();
+            dbPromise = null;
+          };
+          resolve(db);
+        };
+        req.onerror = () => {
+          dbPromise = null;
+          reject(req.error);
+        };
+        req.onblocked = () => console.warn('IndexedDB 升级被其他页面阻塞');
+      });
+      return dbPromise;
+    }
+    async function dbSetToStore(storeName, key, value) {
+      const db = await getDb();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(storeName, 'readwrite');
+        tx.objectStore(storeName).put(value, key);
+        tx.oncomplete = () => resolve(true);
+        tx.onerror = () => reject(tx.error);
+      });
+    }
+    async function dbGetFromStore(storeName, key) {
+      const db = await getDb();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(storeName, 'readonly');
+        const req = tx.objectStore(storeName).get(key);
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
+    }
+    async function dbDeleteFromStore(storeName, key) {
+      const db = await getDb();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(storeName, 'readwrite');
+        tx.objectStore(storeName).delete(key);
+        tx.oncomplete = () => resolve(true);
+        tx.onerror = () => reject(tx.error);
+      });
+    }
+    async function dbSet(key, value) { return dbSetToStore(STORE, key, value); }
+    async function dbGet(key) { return dbGetFromStore(STORE, key); }
+    async function dbSetImage(key, value) { return dbSetToStore(IMAGE_STORE, key, value); }
+    async function dbGetImage(key) { return dbGetFromStore(IMAGE_STORE, key); }
+    async function dbDeleteImage(key) { return dbDeleteFromStore(IMAGE_STORE, key); }
+
+    function supportsFileSystemAccess() {
+      return typeof window.showDirectoryPicker === 'function';
+    }
+    function updateSaveDirStatus(extra = '') {
+      if (!els.saveDirStatus) return;
+      if (!supportsFileSystemAccess()) {
+        els.saveDirStatus.textContent = '当前浏览器不支持文件夹直存；请使用下载按钮或 ZIP';
+        els.saveDirStatus.className = 'mb-3 truncate rounded-lg border border-amber-500/25 bg-amber-500/10 px-2.5 py-2 text-[11px] text-amber-100 mono';
+        [els.chooseSaveDirBtn, els.checkSaveDirBtn].forEach(btn => { if (btn) { btn.disabled = true; btn.classList.add('opacity-50','cursor-not-allowed'); } });
+        return;
+      }
+      [els.chooseSaveDirBtn, els.checkSaveDirBtn].forEach(btn => { if (btn) { btn.disabled = false; btn.classList.remove('opacity-50','cursor-not-allowed'); } });
+      const name = state.saveDirName || state.saveDirHandle?.name || '';
+      els.saveDirStatus.textContent = name ? `已选择：${name}${extra ? ` · ${extra}` : ''}` : '未选择文件夹';
+      els.saveDirStatus.className = 'mb-3 truncate rounded-lg border border-slate-800 bg-slate-950/70 px-2.5 py-2 text-[11px] text-slate-300 mono';
+    }
+    async function restoreSaveDirectoryHandle() {
+      updateSaveDirStatus();
+      if (!supportsFileSystemAccess()) return;
+      try {
+        const handle = await dbGet(SAVE_DIR_HANDLE_KEY);
+        if (handle) {
+          state.saveDirHandle = handle;
+          state.saveDirName = handle.name || '已授权文件夹';
+          let permission = 'prompt';
+          try { permission = await handle.queryPermission({ mode: 'readwrite' }); } catch {}
+          updateSaveDirStatus(permission === 'granted' ? '已授权' : '需要点击“检查权限”重新授权');
+        }
+      } catch (e) {
+        console.warn('restore save directory failed', e);
+        updateSaveDirStatus('恢复失败');
+      }
+    }
+    async function chooseSaveDirectory() {
+      if (!supportsFileSystemAccess()) return setStatus('当前浏览器不支持选择保存文件夹，请使用下载或 ZIP', 'warn');
+      try {
+        const handle = await window.showDirectoryPicker({ mode: 'readwrite' });
+        state.saveDirHandle = handle;
+        state.saveDirName = handle.name || '已授权文件夹';
+        await dbSet(SAVE_DIR_HANDLE_KEY, handle);
+        updateSaveDirStatus('已授权');
+        setStatus(`已选择保存文件夹：${state.saveDirName}`, 'ok');
+      } catch (e) {
+        if (e?.name !== 'AbortError') setStatus(`选择文件夹失败：${e?.message || e}`, 'error');
+      }
+    }
+    async function ensureSaveDirectoryPermission(showPrompt = false) {
+      if (!supportsFileSystemAccess()) return null;
+      const handle = state.saveDirHandle;
+      if (!handle) return null;
+      try {
+        let permission = await handle.queryPermission({ mode: 'readwrite' });
+        if (permission !== 'granted' && showPrompt) {
+          permission = await handle.requestPermission({ mode: 'readwrite' });
+        }
+        updateSaveDirStatus(permission === 'granted' ? '已授权' : '未授权');
+        return permission === 'granted' ? handle : null;
+      } catch (e) {
+        updateSaveDirStatus('权限检查失败');
+        if (showPrompt) setStatus(`文件夹权限检查失败：${e?.message || e}`, 'error');
+        return null;
+      }
+    }
+    async function clearSaveDirectoryHandle() {
+      state.saveDirHandle = null;
+      state.saveDirName = '';
+      try { await dbDeleteFromStore(STORE, SAVE_DIR_HANDLE_KEY); } catch {}
+      updateSaveDirStatus();
+      setStatus('已清除保存文件夹授权记录', 'ok');
+    }
+    function safeFilenamePart(value, fallback = 'image') {
+      const s = String(value || '').trim().replace(/[\/:*?"<>|]+/g, '-').replace(/\s+/g, '-').replace(/-+/g, '-').slice(0, 80);
+      return s || fallback;
+    }
+    function buildAutoSaveFilename(task, img, index, blob) {
+      const provider = task?.provider || task?.input?.apiFormat || 'openai';
+      const fallbackPrefix = DEFAULT_SAVE_PREFIXES[provider] || 'image';
+      const configuredPrefix = task?.input?.saveNamePrefix || state.savePrefixByFormat[provider] || fallbackPrefix;
+      const prefix = safeFilenamePart(configuredPrefix, fallbackPrefix);
+      const ext = (img.format === 'jpeg' ? 'jpg' : (img.format || imageFormatFromType(blob?.type, 'png'))).replace(/^jpg$/, 'jpg');
+      const ts = new Date(task.finishedAt || Date.now()).toISOString().replace(/[:.]/g, '-');
+      const taskNo = String(task.index || 0).padStart(3, '0');
+      const imageNo = String(index + 1).padStart(2, '0');
+      const sizePart = img.width && img.height ? `-${img.width}x${img.height}` : '';
+      return `${prefix}-${ts}-task-${taskNo}-image-${imageNo}${sizePart}.${ext}`;
+    }
+    async function writeBlobToDirectory(dirHandle, filename, blob) {
+      const fileHandle = await dirHandle.getFileHandle(filename, { create: true });
+      const writable = await fileHandle.createWritable();
+      try {
+        await writable.write(blob);
+      } finally {
+        await writable.close();
+      }
+    }
+    async function autoSaveTaskImages(taskId) {
+      if (!els.autoSaveImages?.checked) return;
+      const task = state.tasks.find(t => t.id === taskId);
+      if (!task?.images?.length) return;
+      const dir = await ensureSaveDirectoryPermission(false);
+      if (!dir) {
+        task.localSave = { ok: false, message: '未选择或未授权保存文件夹' };
+        markTaskStorageDirty(task);
+        requestTaskRender();
+        requestPersistSnapshot(false);
+        setStatus('自动保存未执行：请先点击“选择文件夹”并授权', 'warn');
+        return;
+      }
+      let saved = 0;
+      const errors = [];
+      for (let i = 0; i < task.images.length; i++) {
+        const img = task.images[i];
+        try {
+          const blob = await imageItemToBlob(img);
+          if (!blob) throw new Error('原图读取失败');
+          const filename = buildAutoSaveFilename(task, img, i, blob);
+          await writeBlobToDirectory(dir, filename, blob);
+          img.autoSavedName = filename;
+          saved++;
+        } catch (e) {
+          errors.push(`图${i + 1}: ${e?.message || e}`);
+        }
+      }
+      task.localSave = errors.length
+        ? { ok: saved > 0, message: `已保存 ${saved}/${task.images.length} 张；${errors.slice(0, 2).join('；')}` }
+        : { ok: true, message: `已自动保存 ${saved} 张到 ${state.saveDirName || '所选文件夹'}` };
+      markTaskStorageDirty(task);
+      requestTaskRender();
+      requestPersistSnapshot(false);
+      setStatus(task.localSave.message, errors.length ? 'warn' : 'ok');
+    }
+
+    function requestTaskRender() {
+      if (state.renderPending) return;
+      state.renderPending = true;
+      requestAnimationFrame(() => {
+        state.renderPending = false;
+        renderTasks();
+        syncRunControls();
+      });
+    }
+    function requestPersistSnapshot(immediate = false) {
+      if (state.persistTimer) {
+        clearTimeout(state.persistTimer);
+        state.persistTimer = null;
+      }
+      if (immediate) return persistSnapshot();
+      state.persistTimer = setTimeout(() => {
+        state.persistTimer = null;
+        persistSnapshot();
+      }, PERSIST_DEBOUNCE_MS);
+    }
+
+    function getModelCatalog(format = state.apiFormat) {
+      return MODEL_CATALOG[format] || [];
+    }
+    function updateModelSelectionUi() {
+      const model = els.model.value.trim();
+      const match = getModelCatalog().find(item => item.id === model);
+      els.modelPreset.value = match ? match.id : CUSTOM_MODEL_VALUE;
+      els.modelHint.textContent = match
+        ? `${match.detail} 模型 ID：${match.id}`
+        : (model
+          ? `正在使用自定义模型 ID：${model}。适用于中转站别名或新模型。`
+          : `模型 ID 为空时将使用默认值：${DEFAULT_MODELS[state.apiFormat]}`);
+      if (model) state.modelByFormat[state.apiFormat] = model;
+    }
+    function renderModelOptions(format = state.apiFormat) {
+      const catalog = getModelCatalog(format);
+      const presetFragment = document.createDocumentFragment();
+      const listFragment = document.createDocumentFragment();
+      catalog.forEach(item => {
+        const option = document.createElement('option');
+        option.value = item.id;
+        option.textContent = item.label;
+        presetFragment.appendChild(option);
+
+        const suggestion = document.createElement('option');
+        suggestion.value = item.id;
+        suggestion.label = item.label;
+        listFragment.appendChild(suggestion);
+      });
+      const customOption = document.createElement('option');
+      customOption.value = CUSTOM_MODEL_VALUE;
+      customOption.textContent = '自定义模型 ID…';
+      presetFragment.appendChild(customOption);
+      els.modelPreset.replaceChildren(presetFragment);
+      els.modelList.replaceChildren(listFragment);
+      updateModelSelectionUi();
+    }
+    function applyModelPreset() {
+      if (els.modelPreset.value === CUSTOM_MODEL_VALUE) {
+        els.model.focus();
+        els.model.select();
+        updateModelSelectionUi();
+        return;
+      }
+      els.model.value = els.modelPreset.value;
+      updateModelSelectionUi();
+      updateEndpointBadge();
+      requestSettingsSave();
+    }
+
+    function isOfficialGeminiBaseUrl(baseUrl = '') {
+      try {
+        return new URL(String(baseUrl).trim()).hostname.toLowerCase() === 'generativelanguage.googleapis.com';
+      } catch {
+        return String(baseUrl).trim().replace(/^https?:\/\//i, '').split('/')[0].toLowerCase() === 'generativelanguage.googleapis.com';
+      }
+    }
+    function isOfficialAgentPlatformBaseUrl(baseUrl = '') {
+      try {
+        return new URL(String(baseUrl).trim()).hostname.toLowerCase() === 'aiplatform.googleapis.com';
+      } catch {
+        return String(baseUrl).trim().replace(/^https?:\/\//i, '').split('/')[0].toLowerCase() === 'aiplatform.googleapis.com';
+      }
+    }
+    function parseVertexKeys(raw = '') {
+      const items = [];
+      const invalidLines = [];
+      String(raw || '').split(/\r?\n/).forEach((line, index) => {
+        const trimmed = line.trim();
+        if (!trimmed) return;
+        const separator = trimmed.indexOf('|');
+        const key = separator >= 0 ? trimmed.slice(0, separator).trim() : '';
+        const projectId = separator >= 0 ? trimmed.slice(separator + 1).trim() : '';
+        if (!key || !projectId) {
+          invalidLines.push(index + 1);
+          return;
+        }
+        items.push({ key, projectId, line: index + 1 });
+      });
+      return { items, invalidLines };
+    }
+    function updateVertexKeysUi() {
+      if (!els.vertexKeysHint) return;
+      const parsed = parseVertexKeys(els.vertexKeys?.value || state.vertexKeysRaw);
+      const invalid = parsed.invalidLines.length ? `；第 ${parsed.invalidLines.join('、')} 行格式无效` : '';
+      els.vertexKeysHint.textContent = parsed.items.length
+        ? `已识别 ${parsed.items.length} 组项目凭据：使用 global 项目级流式通道，并在任务和 429 重试时轮询${invalid}。RAW 日志不会记录 Key。`
+        : `尚未识别有效项目凭据${invalid}。可使用 KEY|PROJECT_ID；仅填写上方默认 Key 时才走 Express 通道。`;
+      els.vertexKeysHint.classList.toggle('text-amber-400', !!parsed.invalidLines.length);
+      els.vertexKeysHint.classList.toggle('text-slate-500', !parsed.invalidLines.length);
+    }
+    function getNextVertexCredential() {
+      const raw = state.apiFormat === 'vertex' && els.vertexKeys ? els.vertexKeys.value : state.vertexKeysRaw;
+      const { items } = parseVertexKeys(raw);
+      if (items.length) {
+        const slot = state.vertexKeyIndex % items.length;
+        state.vertexKeyIndex = (slot + 1) % items.length;
+        return { ...items[slot], slot: slot + 1, total: items.length, source: 'pool' };
+      }
+      const key = getProviderApiKey('vertex');
+      return key ? { key, projectId: '', slot: 0, total: 0, source: 'default' } : null;
+    }
+    function getVertexPreviewCredential() {
+      const { items } = parseVertexKeys(els.vertexKeys?.value || state.vertexKeysRaw);
+      if (items.length) return { ...items[0], source: 'pool' };
+      const key = getProviderApiKey('vertex');
+      return key ? { key, projectId: '', source: 'default' } : null;
+    }
+    function usesVertexExpressEndpoint(credential = null) {
+      return !credential?.projectId;
+    }
+    function normalizeApiVersion(format, baseUrl, apiVersion, apiMode = '') {
+      const normalized = String(apiVersion || DEFAULT_CONNECTIONS[format]?.apiVersion || 'v1').trim().replace(/^\/+|\/+$/g, '');
+      // Gemini Developer API 的图片扩展字段仍优先使用官方 v1beta。
+      // Vertex 项目级 GenerateContent 使用 GA v1；Express 通道会在构建端点时单独兼容 v1beta1。
+      if (format === 'gemini' && apiMode === 'gemini' && isOfficialGeminiBaseUrl(baseUrl) && /^v1$/i.test(normalized)) {
+        return 'v1beta';
+      }
+      if (format === 'vertex' && isOfficialAgentPlatformBaseUrl(baseUrl) && /^(?:v1|v1beta|v1beta1)$/i.test(normalized)) {
+        return 'v1';
+      }
+      return normalized;
+    }
+    function normalizeConnectionProfile(format, profile = {}) {
+      const defaults = DEFAULT_CONNECTIONS[format] || DEFAULT_CONNECTIONS.openai;
+      const validModes = format === 'openai' ? ['image', 'chat'] : [format];
+      const requestedMode = String(profile.apiMode || defaults.apiMode);
+      const apiKey = typeof profile.apiKey === 'string' ? profile.apiKey : '';
+      let baseUrl = String(profile.baseUrl || defaults.baseUrl).trim() || defaults.baseUrl;
+      let apiMode = validModes.includes(requestedMode) ? requestedMode : defaults.apiMode;
+      return {
+        baseUrl,
+        apiVersion: normalizeApiVersion(format, baseUrl, profile.apiVersion || defaults.apiVersion, apiMode),
+        apiMode,
+        apiKey
+      };
+    }
+    function captureCurrentProviderSettings(format = state.apiFormat) {
+      if (!DEFAULT_CONNECTIONS[format]) return;
+      state.connectionByFormat[format] = normalizeConnectionProfile(format, {
+        baseUrl: els.baseUrl.value,
+        apiVersion: els.apiVersion.value,
+        apiMode: els.apiMode.value,
+        apiKey: els.apiKey.value
+      });
+      const model = els.model.value.trim();
+      if (model) state.modelByFormat[format] = model;
+      state.savePrefixByFormat[format] = els.saveNamePrefix.value.trim() || DEFAULT_SAVE_PREFIXES[format];
+      if (format === 'vertex' && els.vertexKeys) state.vertexKeysRaw = els.vertexKeys.value;
+    }
+    function applyProviderSettings(format = state.apiFormat) {
+      const profile = normalizeConnectionProfile(format, state.connectionByFormat[format]);
+      state.connectionByFormat[format] = profile;
+      els.baseUrl.value = profile.baseUrl;
+      els.apiVersion.value = profile.apiVersion;
+      els.apiMode.value = profile.apiMode;
+      els.apiKey.value = profile.apiKey;
+      els.model.value = state.modelByFormat[format] || DEFAULT_MODELS[format];
+      els.saveNamePrefix.value = state.savePrefixByFormat[format] || DEFAULT_SAVE_PREFIXES[format];
+      if (els.vertexKeys) els.vertexKeys.value = state.vertexKeysRaw;
+    }
+    function getProviderApiKey(format = state.apiFormat) {
+      if (format === state.apiFormat) return els.apiKey.value.trim();
+      return String(state.connectionByFormat[format]?.apiKey || '').trim();
+    }
+    function resetOfficialConnection() {
+      const currentKey = getProviderApiKey(state.apiFormat);
+      const official = DEFAULT_CONNECTIONS[state.apiFormat] || DEFAULT_CONNECTIONS.openai;
+      state.connectionByFormat[state.apiFormat] = {
+        ...official,
+        apiKey: currentKey
+      };
+      applyProviderSettings(state.apiFormat);
+      updateModeUi();
+      updateEndpointBadge();
+      saveSettings(false);
+      const providerName = state.apiFormat === 'openai' ? 'OpenAI' : (state.apiFormat === 'vertex' ? 'Vertex' : 'Gemini');
+      setStatus(`已恢复 ${providerName} 官方地址与接口，API Key 已保留`, 'ok');
+    }
+    function requestSettingsSave() {
+      if (state.settingsSaveTimer) clearTimeout(state.settingsSaveTimer);
+      state.settingsSaveTimer = setTimeout(() => {
+        state.settingsSaveTimer = null;
+        saveSettings(false);
+      }, SETTINGS_SAVE_DEBOUNCE_MS);
+    }
+    function saveSettings(showFeedback = false) {
+      if (state.settingsSaveTimer) {
+        clearTimeout(state.settingsSaveTimer);
+        state.settingsSaveTimer = null;
+      }
+      captureCurrentProviderSettings();
+      const data = {
+        apiFormat: state.apiFormat,
+        connectionByFormat: {
+          openai: { ...state.connectionByFormat.openai },
+          gemini: { ...state.connectionByFormat.gemini },
+          vertex: { ...state.connectionByFormat.vertex }
+        },
+        vertexKeysRaw: els.vertexKeys?.value || state.vertexKeysRaw,
+        baseUrl: els.baseUrl.value,
+        apiVersion: els.apiVersion.value,
+        apiMode: els.apiMode.value,
+        chatExtraParams: els.chatExtraParams.checked,
+        apiKey: els.apiKey.value,
+        model: els.model.value,
+        modelByFormat: { ...state.modelByFormat },
+        savePrefixByFormat: { ...state.savePrefixByFormat },
+        quality: els.quality.value,
+        n: els.n.value,
+        taskCount: els.taskCount.value,
+        parallelCount: els.parallelCount.value,
+        requestTimeout: els.requestTimeout.value,
+        outputFormat: els.outputFormat.value,
+        size: els.size.value,
+        customW: els.customW.value,
+        customH: els.customH.value,
+        compression: els.compression.value,
+        background: els.background.value,
+        stream: els.stream.checked,
+        optimizeInput: els.optimizeInput.checked,
+        maxEdge: els.maxEdge.value,
+        inputQuality: els.inputQuality.value,
+        mediaResolution: els.mediaResolution?.value || 'ultra',
+        autoSaveImages: els.autoSaveImages?.checked || false,
+        saveNamePrefix: els.saveNamePrefix?.value || DEFAULT_SAVE_PREFIXES[state.apiFormat],
+        prompt: els.prompt.value
+      };
+      try {
+        localStorage.setItem(SETTINGS_KEY, JSON.stringify(data));
+        if (showFeedback) setStatus('配置已保存到当前浏览器；HTML 文件本身不包含密钥', 'ok');
+        return true;
+      } catch (e) {
+        console.warn('保存本地配置失败', e);
+        if (showFeedback) setStatus('配置保存失败：浏览器可能禁止本地存储', 'error');
+        return false;
+      }
+    }
+    function loadSettings() {
+      let saved = {};
+      try {
+        saved = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}');
+      } catch (e) {
+        console.warn('读取本地配置失败，已使用默认设置', e);
+      }
+      const savedConnections = saved.connectionByFormat && typeof saved.connectionByFormat === 'object' ? saved.connectionByFormat : null;
+      const legacyVertexProfile = savedConnections?.gemini?.apiMode === 'vertex'
+        ? savedConnections.gemini
+        : (saved.apiFormat === 'gemini' && saved.apiMode === 'vertex' ? saved : null);
+      if (legacyVertexProfile && saved.apiFormat === 'gemini') {
+        state.apiFormat = 'vertex';
+      } else if (saved.apiFormat && MODEL_CATALOG[saved.apiFormat]) {
+        state.apiFormat = saved.apiFormat;
+      }
+      if (savedConnections) {
+        state.connectionByFormat = {
+          openai: normalizeConnectionProfile('openai', savedConnections.openai),
+          gemini: normalizeConnectionProfile('gemini', legacyVertexProfile ? DEFAULT_CONNECTIONS.gemini : savedConnections.gemini),
+          vertex: normalizeConnectionProfile('vertex', savedConnections.vertex || legacyVertexProfile)
+        };
+      } else if (Object.keys(saved).length) {
+        const targetFormat = legacyVertexProfile ? 'vertex' : state.apiFormat;
+        state.connectionByFormat[targetFormat] = normalizeConnectionProfile(targetFormat, {
+          baseUrl: saved.baseUrl,
+          apiVersion: saved.apiVersion,
+          apiMode: saved.apiMode,
+          apiKey: saved.apiKey
+        });
+      }
+      if (saved.modelByFormat && typeof saved.modelByFormat === 'object') {
+        state.modelByFormat = { ...DEFAULT_MODELS, ...saved.modelByFormat };
+        if (legacyVertexProfile && !saved.modelByFormat.vertex && saved.modelByFormat.gemini) {
+          state.modelByFormat.vertex = saved.modelByFormat.gemini;
+        }
+      }
+      if ('chatExtraParams' in saved) els.chatExtraParams.checked = !!saved.chatExtraParams;
+      if (saved.model) {
+        state.modelByFormat[state.apiFormat] = saved.model;
+      }
+      if (saved.savePrefixByFormat && typeof saved.savePrefixByFormat === 'object') {
+        state.savePrefixByFormat = { ...DEFAULT_SAVE_PREFIXES, ...saved.savePrefixByFormat };
+      } else if (saved.saveNamePrefix) {
+        state.savePrefixByFormat[state.apiFormat] = saved.saveNamePrefix;
+      }
+      if (saved.quality) els.quality.value = saved.quality;
+      if (saved.n) els.n.value = saved.n;
+      if (saved.taskCount) els.taskCount.value = saved.taskCount;
+      else if (saved.parallelCount) els.taskCount.value = saved.parallelCount;
+      if (saved.parallelCount) els.parallelCount.value = saved.parallelCount;
+      if (saved.requestTimeout) els.requestTimeout.value = saved.requestTimeout;
+      if (saved.outputFormat) els.outputFormat.value = saved.outputFormat;
+      if (saved.size) els.size.value = saved.size;
+      if (saved.customW) els.customW.value = saved.customW;
+      if (saved.customH) els.customH.value = saved.customH;
+      if (saved.compression) els.compression.value = saved.compression;
+      if (saved.background) els.background.value = saved.background;
+      if ('stream' in saved) els.stream.checked = !!saved.stream;
+      if ('optimizeInput' in saved) els.optimizeInput.checked = !!saved.optimizeInput;
+      if (saved.maxEdge) els.maxEdge.value = saved.maxEdge;
+      if (saved.inputQuality) els.inputQuality.value = saved.inputQuality;
+      if (saved.mediaResolution && MEDIA_RESOLUTION_VALUES[saved.mediaResolution] !== undefined && els.mediaResolution) {
+        els.mediaResolution.value = saved.mediaResolution;
+      }
+      if ('autoSaveImages' in saved && els.autoSaveImages) els.autoSaveImages.checked = !!saved.autoSaveImages;
+      if (saved.prompt) els.prompt.value = saved.prompt;
+      let legacyVertexKeys = '';
+      try { legacyVertexKeys = localStorage.getItem('gem_vertex_keys') || ''; } catch {}
+      state.vertexKeysRaw = String(saved.vertexKeysRaw || legacyVertexKeys || '');
+      if (els.vertexKeys) els.vertexKeys.value = state.vertexKeysRaw;
+      applyApiFormat(state.apiFormat, false);
+      updateVertexKeysUi();
+      updateCustomSize();
+      updateModeUi();
+      updateEndpointBadge();
+    }
+
+    function compactLargeStrings(value, depth = 0) {
+      if (value == null) return value;
+      if (typeof value === 'string') {
+        if (value.length > LARGE_STRING_LIMIT || value.startsWith('data:image/')) {
+          return `[已截断 ${value.length} 字符，避免历史记录过大] ${value.slice(0, 180)}`;
+        }
+        return value;
+      }
+      if (Array.isArray(value)) {
+        if (depth > 5) return `[数组已截断 ${value.length} 项]`;
+        return value.slice(0, 80).map(item => compactLargeStrings(item, depth + 1));
+      }
+      if (typeof value === 'object') {
+        if (depth > 5) return '[对象层级过深，已截断]';
+        const out = {};
+        Object.entries(value).forEach(([k, v]) => {
+          if (/b64_json|base64|data_url|inline_?data|image_url/i.test(k)) {
+            out[k] = '[图片/大字段已隐藏，避免历史记录过大]';
+          } else {
+            out[k] = compactLargeStrings(v, depth + 1);
+          }
+        });
+        return out;
+      }
+      return value;
+    }
+    function markTaskStorageDirty(task) {
+      if (task) taskStorageCache.delete(task);
+    }
+    function sanitizeTaskForStorage(task) {
+      const cached = taskStorageCache.get(task);
+      if (cached) return cached;
+      const t = { ...task };
+      delete t.abortController;
+      if (t.error) t.error = sanitizeSensitiveString(t.error);
+      if (t.request) t.request = compactLargeStrings(redact(t.request));
+      if (t.response) {
+        t.response = redact({
+          ...t.response,
+          raw_text_preview: String(t.response.raw_text_preview || '').slice(0, RAW_TEXT_PREVIEW_LIMIT),
+          body: compactLargeStrings(t.response.body || {}),
+          headers: compactLargeStrings(t.response.headers || {}),
+          diagnostics: Array.isArray(t.response.diagnostics) ? t.response.diagnostics.slice(0, 12) : t.response.diagnostics
+        });
+      }
+      // 结果原图单独存 IndexedDB Blob；任务历史只保留缩略图和 imageKey，避免 base64 大图拖慢重开。
+      if (Array.isArray(t.images)) {
+        t.images = t.images.map(img => {
+          const out = { ...img };
+          out.meta = compactLargeStrings(out.meta || {});
+          if (out.imageKey && typeof out.src === 'string' && out.src.startsWith('data:image/')) {
+            delete out.src;
+          } else if (typeof out.src === 'string' && out.src.length > LARGE_STRING_LIMIT && out.thumbSrc) {
+            out.src = out.thumbSrc;
+          }
+          return out;
+        });
+      }
+      // input.files 里已经保存了参考图 dataUrl；任务历史中无需重复保存，避免队列历史越来越大。
+      if (t.input && Array.isArray(t.input.files)) {
+        t.input = {
+          ...t.input,
+          files: t.input.files.map(f => ({
+            name: f.name,
+            type: f.type,
+            size: f.size,
+            dataUrl: '[已移除任务内参考图副本，当前参考图会单独保存]'
+          }))
+        };
+      }
+      taskStorageCache.set(task, t);
+      return t;
+    }
+    function getPersistableTasks() {
+      return state.tasks.slice(0, MAX_PERSISTED_TASKS).map(sanitizeTaskForStorage);
+    }
+
+    async function persistSnapshot() {
+      if (state.persistInFlight) {
+        state.persistAgain = true;
+        return;
+      }
+      state.persistInFlight = true;
+      try {
+        const snapshot = {
+          tasks: getPersistableTasks(),
+          referenceFiles: state.referenceFiles || [],
+          prompt: els.prompt.value,
+          apiFormat: state.apiFormat,
+          nextTaskIndex: state.nextTaskIndex,
+          nextQueueSeq: state.nextQueueSeq,
+          queuePaused: state.queuePaused,
+          savedAt: Date.now()
+        };
+        await dbSet(SNAPSHOT_KEY, snapshot);
+      } catch (e) {
+        console.warn('persist snapshot failed', e);
+      } finally {
+        state.persistInFlight = false;
+        if (state.persistAgain) {
+          state.persistAgain = false;
+          requestPersistSnapshot(true);
+        }
+      }
+    }
+    async function restoreSnapshot() {
+      try {
+        const snap = await dbGet(SNAPSHOT_KEY);
+        if (!snap) return;
+        if (snap.prompt && !els.prompt.value) els.prompt.value = snap.prompt;
+        if (Array.isArray(snap.referenceFiles)) {
+          state.referenceFiles = snap.referenceFiles.slice(0, 16);
+          state.files = state.referenceFiles.map((item, idx) => {
+            try {
+              const file = dataUrlToFile(item.dataUrl, item.name || `reference-${idx + 1}.png`, item.type || 'image/png');
+              fileDataUrlCache.set(file, Promise.resolve(item.dataUrl));
+              return file;
+            } catch (e) {
+              console.warn('restore reference file failed', e);
+              return null;
+            }
+          }).filter(Boolean);
+          renderPreviews(false);
+        }
+        if (Array.isArray(snap.tasks)) {
+          const originalTaskCount = snap.tasks.length;
+          state.tasks = snap.tasks.slice(0, MAX_PERSISTED_TASKS).map(task => {
+            if (task.status === 'queued') {
+              task.status = 'cancelled';
+              task.error = task.error || '页面刷新后队列未继续发送';
+            } else if (RUNNING_STAGES.has(task.status) && task.status !== 'queued') {
+              const hasImgs = Array.isArray(task.images) && task.images.length;
+              task.status = hasImgs ? 'success' : 'failed';
+              task.error = hasImgs ? '' : '页面刷新前任务中断';
+            }
+            return task;
+          });
+          const discardedGeminiImageKeys = pruneGeminiTaskResults(state.tasks);
+          if (discardedGeminiImageKeys.length) deleteImageKeys(discardedGeminiImageKeys);
+          if (originalTaskCount > MAX_PERSISTED_TASKS) {
+            setStatus(`历史记录过多，已自动只保留最近 ${MAX_PERSISTED_TASKS} 条`, 'warn');
+          }
+        }
+        state.renderLimit = INITIAL_RENDER_LIMIT;
+        state.queuePaused = !!snap.queuePaused;
+        const maxIndex = state.tasks.reduce((m, t) => Math.max(m, Number(t.index || 0)), 0);
+        const maxQueueSeq = state.tasks.reduce((m, t) => Math.max(m, Number(t.queueSeq || 0)), 0);
+        state.nextTaskIndex = Math.max(Number(snap.nextTaskIndex || 1), maxIndex + 1);
+        state.nextQueueSeq = Math.max(Number(snap.nextQueueSeq || 1), maxQueueSeq + 1);
+        renderTasks();
+        syncRunControls();
+        scheduleQueue();
+        // 旧版本可能把 RAW / 参考图副本 / 结果原图 base64 重复写进任务，首次恢复后后台迁移压缩重写，下次打开会明显更快。
+        migrateLegacyTaskImages().then(() => requestPersistSnapshot(true));
+      } catch (e) {
+        console.warn('restore snapshot failed', e);
+      }
+    }
+
+    function applyApiFormat(format, persistPrevious = true) {
+      if (!MODEL_CATALOG[format]) return;
+      const previousFormat = state.apiFormat;
+      if (persistPrevious) captureCurrentProviderSettings(previousFormat);
+      state.apiFormat = format;
+      els.fmtOpenAI.classList.toggle('active', format === 'openai');
+      els.fmtGemini.classList.toggle('active', format === 'gemini');
+      els.fmtVertex.classList.toggle('active', format === 'vertex');
+      if (format === 'openai') {
+        els.apiKeyLabel.textContent = 'OpenAI API Key';
+        els.apiKey.placeholder = 'sk-...';
+        els.apiMode.innerHTML = `
+          <option value="image" selected>Images API · /images/generations 或 /images/edits</option>
+          <option value="chat">Chat Completions · /chat/completions</option>`;
+      } else if (format === 'gemini') {
+        els.apiKeyLabel.textContent = 'Gemini Developer API Key';
+        els.apiKey.placeholder = 'AIza...';
+        els.apiMode.innerHTML = `
+          <option value="gemini" selected>Gemini Developer API · /models/{model}:generateContent</option>`;
+      } else {
+        els.apiKeyLabel.textContent = 'Vertex 默认 API Key（密钥池为空时使用）';
+        els.apiKey.placeholder = 'AQ.... / AIza...';
+        els.apiMode.innerHTML = `
+          <option value="vertex" selected>Vertex Project Stream / Express GenerateContent</option>`;
+      }
+      applyProviderSettings(format);
+      renderModelOptions(format);
+      updateModeUi();
+      updateEndpointBadge();
+      if (persistPrevious) requestSettingsSave();
+    }
+
+    function updateModeUi() {
+      const isOpenAI = state.apiFormat === 'openai';
+      const isGemini = state.apiFormat === 'gemini';
+      const isVertex = state.apiFormat === 'vertex';
+      const isOpenAIChat = isOpenAI && els.apiMode.value === 'chat';
+      els.providerEndpointHint.classList.toggle('hidden', isOpenAI);
+      if (isGemini) {
+        els.apiKeyLabel.textContent = 'Gemini Developer API Key';
+        els.providerEndpointHint.textContent = '适用于 Google AI Studio / Gemini Developer API（常见 AIza… Key）；官方 GenerateContent 图片接口为 v1beta。';
+      } else if (isVertex) {
+        els.apiKeyLabel.textContent = 'Vertex 默认 API Key（密钥池为空时使用）';
+        els.providerEndpointHint.textContent = 'Vertex 密钥池优先：KEY|PROJECT_ID 使用 v1 / global 项目级 streamGenerateContent；只有未配置 Project ID 的默认 Key 才走 Express。请求会使用指数退避并在 429 重试时轮换项目凭据。';
+      }
+      els.vertexKeysWrap?.classList.toggle('hidden', !isVertex);
+      els.chatExtraWrap.classList.toggle('hidden', !isOpenAIChat);
+      els.chatExtraParams.disabled = !isOpenAIChat;
+      els.quality.disabled = !isOpenAI;
+      els.n.disabled = !isOpenAI;
+      els.outputFormat.disabled = !isOpenAI;
+      els.compression.disabled = !isOpenAI;
+      els.background.disabled = !isOpenAI;
+      els.stream.disabled = !isOpenAI;
+      if (els.mediaResolution) els.mediaResolution.disabled = isOpenAI;
+      els.quality.classList.toggle('opacity-60', !isOpenAI);
+      els.n.classList.toggle('opacity-60', !isOpenAI);
+      els.outputFormat.classList.toggle('opacity-60', !isOpenAI);
+      els.compression.classList.toggle('opacity-60', !isOpenAI);
+      els.mediaResolutionWrap?.classList.toggle('opacity-60', isOpenAI);
+      els.qualityLabel.textContent = isOpenAI ? '质量' : `质量（${isVertex ? 'Vertex' : 'Gemini'} 不使用）`;
+      els.requestCountLabel.textContent = isOpenAI ? '单任务出图数' : '单任务出图数（接口固定 1）';
+      els.qualityHint.textContent = isOpenAI
+        ? 'OpenAI Images API 会发送 quality：auto / low / medium / high。'
+        : 'Gemini / Vertex 原生接口没有 quality 档位，auto / low / medium / high 都不会发送。单任务固定 1 张只代表一次请求的返回数量；需要多张时请调整下方“生成任务数”。Nano Banana Pro 要最高输出规格请选择 4K。';
+      els.sizeHint.textContent = isOpenAI
+        ? 'OpenAI 会发送宽×高；选择 1K / 2K / 4K 只是快捷填入尺寸。'
+        : 'Gemini / Vertex 会把宽×高转换为最接近的官方宽高比，并发送 1K / 2K / 4K。选择 4K 可获得最高分辨率，但耗时和费用也更高。';
+      updateVertexKeysUi();
+    }
+
+    function endpointBase(vertexCredential = null) {
+      const base = (els.baseUrl.value.trim() || DEFAULT_CONNECTIONS[state.apiFormat]?.baseUrl || DEFAULT_CONNECTIONS.openai.baseUrl).replace(/\/+$/, '');
+      let ver = normalizeApiVersion(state.apiFormat, base, els.apiVersion.value, els.apiMode.value);
+      if (state.apiFormat === 'vertex' && isOfficialAgentPlatformBaseUrl(base) && usesVertexExpressEndpoint(vertexCredential)) ver = 'v1beta1';
+      return `${base}/${ver}`;
+    }
+    function normalizeGoogleModelId(model = '') {
+      return String(model || '').trim().replace(/^publishers\/google\/models\//i, '').replace(/^models\//i, '');
+    }
+    function vertexPathForModel(model, credential = null) {
+      const modelId = normalizeGoogleModelId(model || DEFAULT_MODELS.vertex);
+      if (!usesVertexExpressEndpoint(credential) && credential?.projectId) {
+        return `/projects/${encodeURIComponent(credential.projectId)}/locations/global/publishers/google/models/${encodeURIComponent(modelId)}:streamGenerateContent`;
+      }
+      return `/publishers/google/models/${encodeURIComponent(modelId)}:generateContent`;
+    }
+    function endpointPath() {
+      if (state.apiFormat === 'openai') {
+        if (els.apiMode.value === 'chat') return '/chat/completions';
+        return state.files.length ? '/images/edits' : '/images/generations';
+      }
+      const model = normalizeGoogleModelId(els.model.value.trim() || DEFAULT_MODELS[state.apiFormat]);
+      return state.apiFormat === 'vertex'
+        ? vertexPathForModel(model, getVertexPreviewCredential())
+        : `/models/${encodeURIComponent(model)}:generateContent`;
+    }
+    function updateEndpointBadge() {
+      const credential = state.apiFormat === 'vertex' ? getVertexPreviewCredential() : null;
+      els.endpointBadge.textContent = `POST ${endpointBase(credential)}${endpointPath()}`;
+    }
+    function extractEndpointPath(endpoint = '') {
+      const raw = String(endpoint || '').trim();
+      if (!raw) return '';
+      try {
+        const url = new URL(raw, window.location.origin);
+        return url.pathname || raw.replace(/^https?:\/\/[^/]+/i, '');
+      } catch {
+        return raw.replace(/^https?:\/\/[^/]+/i, '');
+      }
+    }
+    function getTaskSendMeta(task) {
+      const input = task?.input || {};
+      const requestPayload = task?.request?.payload || {};
+      const isOpenAI = String(task?.provider || input?.apiFormat || '').toLowerCase() === 'openai';
+      const isChatWithoutExtra = isOpenAI && (task?.apiMode || input?.apiMode) === 'chat' && !input?.chatExtraParams;
+      const endpoint = extractEndpointPath(
+        requestPayload.endpoint || task?.request?.endpoint || `${endpointBaseFromInput(input)}${endpointPathFromInput(input)}`
+      ) || '-';
+      const geminiImageConfig = requestPayload.generationConfig?.imageConfig || requestPayload.generationConfig?.responseFormat?.image;
+      const quality = isOpenAI
+        ? (requestPayload.quality || (isChatWithoutExtra ? '未附加' : (input.quality || 'auto')))
+        : '未使用';
+      const size = geminiImageConfig
+        ? [geminiImageConfig.aspectRatio, geminiImageConfig.imageSize].filter(Boolean).join(' · ')
+        : (requestPayload.size || (isChatWithoutExtra ? '未附加' : (getSizeValueFromInput(input) || 'auto')));
+      const mediaResolutionKey = String(input.mediaResolution || 'ultra').toLowerCase();
+      const mediaResolution = isOpenAI ? '' : (MEDIA_RESOLUTION_LABELS[mediaResolutionKey] || MEDIA_RESOLUTION_LABELS.auto);
+      return {
+        quality: String(quality || 'auto'),
+        size: String(size || 'auto'),
+        mediaResolution,
+        endpoint: String(endpoint || '-')
+      };
+    }
+    function updateCustomSize() {
+      const preset = els.size.value;
+      if (preset && preset !== 'auto' && preset !== 'custom' && /^\d+x\d+$/i.test(preset)) {
+        const [w, h] = preset.toLowerCase().split('x');
+        els.customW.value = w;
+        els.customH.value = h;
+      }
+      updateEndpointBadge();
+    }
+    function setStatus(text, tone = 'muted') {
+      els.status.textContent = text;
+      els.status.className = 'text-xs ' + (tone === 'error' ? 'text-red-300' : tone === 'ok' ? 'text-emerald-300' : tone === 'warn' ? 'text-amber-300' : 'text-slate-400');
+    }
+
+    function applySidebarCollapsed(collapsed, persist = true) {
+      document.body.classList.toggle('sidebar-collapsed', !!collapsed);
+      if (els.sidebarToggleBtn) {
+        els.sidebarToggleBtn.textContent = collapsed ? '显示参数' : '隐藏参数';
+        els.sidebarToggleBtn.title = collapsed ? '展开左侧参数栏' : '收起左侧参数栏';
+        els.sidebarToggleBtn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+      }
+      if (persist) {
+        try { localStorage.setItem('image_workbench_sidebar_collapsed_v1', collapsed ? '1' : '0'); } catch {}
+      }
+    }
+    function toggleSidebar() {
+      applySidebarCollapsed(!document.body.classList.contains('sidebar-collapsed'));
+    }
+    function initSidebarState() {
+      let collapsed = false;
+      try {
+        const saved = localStorage.getItem('image_workbench_sidebar_collapsed_v1');
+        collapsed = saved === '1';
+        if (saved === null && window.innerWidth < 900) collapsed = true;
+      } catch {}
+      applySidebarCollapsed(collapsed, false);
+    }
+
+    function getConfiguredConcurrency() {
+      return Math.max(1, Math.min(20, Math.floor(Number(els.parallelCount.value || 1))));
+    }
+    function getConfiguredTaskCount() {
+      return Math.max(1, Math.min(100, Math.floor(Number(els.taskCount.value || 1))));
+    }
+    function getConcurrencyLimit() {
+      return getConfiguredConcurrency();
+    }
+    function getRetryDelayMs(response, retryIndex) {
+      const rawRetryAfter = String(response?.headers?.get?.('retry-after') || '').trim();
+      const retryAfterSeconds = Number.parseFloat(rawRetryAfter);
+      if (Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0) return Math.min(RETRY_MAX_DELAY_MS, retryAfterSeconds * 1000);
+      const retryAfterDate = rawRetryAfter ? Date.parse(rawRetryAfter) : NaN;
+      if (Number.isFinite(retryAfterDate)) return Math.max(1000, Math.min(RETRY_MAX_DELAY_MS, retryAfterDate - Date.now()));
+      const exponential = Math.min(RETRY_MAX_DELAY_MS, RETRY_BASE_DELAY_MS * (2 ** Math.max(0, retryIndex)));
+      return Math.round(exponential * (0.6 + Math.random() * 0.4));
+    }
+    function waitWithAbort(ms, signal) {
+      return new Promise((resolve, reject) => {
+        if (signal?.aborted) return reject(new DOMException('Aborted', 'AbortError'));
+        const timer = setTimeout(() => {
+          signal?.removeEventListener?.('abort', onAbort);
+          resolve();
+        }, ms);
+        const onAbort = () => {
+          clearTimeout(timer);
+          reject(new DOMException('Aborted', 'AbortError'));
+        };
+        signal?.addEventListener?.('abort', onAbort, { once: true });
+      });
+    }
+    function getQueuedTasks() {
+      return state.tasks
+        .filter(task => task.status === 'queued')
+        .sort((a, b) => Number(a.queueSeq || 0) - Number(b.queueSeq || 0));
+    }
+    function getTaskStats() {
+      return {
+        queued: state.tasks.filter(t => t.status === 'queued').length,
+        running: state.tasks.filter(t => ['requesting', 'retry_wait', 'receiving', 'parsing'].includes(t.status)).length,
+        success: state.tasks.filter(t => t.status === 'success').length,
+        failed: state.tasks.filter(t => t.status === 'failed').length,
+        cancelled: state.tasks.filter(t => t.status === 'cancelled').length,
+        stopped: state.tasks.filter(t => t.status === 'stopped').length
+      };
+    }
+    function syncRunControls() {
+      const stats = getTaskStats();
+      const hasPending = stats.queued > 0 || state.controllerMap.size > 0;
+      els.stopBtn.classList.toggle('hidden', !hasPending);
+      els.runBtn.disabled = false;
+      els.runBtn.classList.remove('opacity-60');
+      if (els.pauseQueueBtn) {
+        els.pauseQueueBtn.textContent = state.queuePaused ? '继续队列' : '暂停队列';
+        els.pauseQueueBtn.classList.toggle('border-emerald-500/35', state.queuePaused);
+        els.pauseQueueBtn.classList.toggle('text-emerald-100', state.queuePaused);
+      }
+      if (els.cancelQueuedBtn) {
+        els.cancelQueuedBtn.disabled = stats.queued === 0;
+        els.cancelQueuedBtn.classList.toggle('opacity-50', stats.queued === 0);
+        els.cancelQueuedBtn.classList.toggle('cursor-not-allowed', stats.queued === 0);
+      }
+      if (els.queueSummary) {
+        const pauseText = state.queuePaused ? ' · 已暂停' : '';
+        els.queueSummary.textContent = `队列 ${stats.queued} · 运行 ${stats.running} · 成功 ${stats.success} · 失败 ${stats.failed} · 取消 ${stats.cancelled + stats.stopped}${pauseText}`;
+      }
+    }
+    function scheduleQueue() {
+      if (state.queuePaused) {
+        syncRunControls();
+        return;
+      }
+      const queued = getQueuedTasks();
+      let launchSlot = 0;
+      while (getTaskStats().running < getConcurrencyLimit()) {
+        const nextTask = queued.shift();
+        if (!nextTask) break;
+        const dispatchDelayMs = String(nextTask.provider || nextTask.input?.apiFormat || '').toLowerCase() === 'vertex'
+          ? launchSlot * VERTEX_REQUEST_STAGGER_MS
+          : 0;
+        launchSlot += 1;
+        executeTask(nextTask.id, dispatchDelayMs).catch(err => {
+          const current = state.tasks.find(t => t.id === nextTask.id);
+          const duration = current?.startedAt ? (Date.now() - current.startedAt) / 1000 : 0;
+          updateTask(nextTask.id, { status: 'failed', error: err?.message || '任务执行失败', duration, finishedAt: Date.now() });
+          state.controllerMap.delete(nextTask.id);
+          scheduleQueue();
+        });
+      }
+      syncRunControls();
+    }
+    async function captureCurrentInputSnapshot() {
+      const files = await mapWithConcurrency(state.files, 3, async (file) => {
+        const sendFile = await optimizeFile(file);
+        const dataUrl = await fileToDataUrlCached(sendFile);
+        return {
+          name: sendFile.name || file.name || 'image',
+          type: sendFile.type || file.type || 'image/png',
+          size: sendFile.size || file.size || 0,
+          dataUrl
+        };
+      });
+      return {
+        apiFormat: state.apiFormat,
+        apiMode: els.apiMode.value,
+        baseUrl: els.baseUrl.value.trim(),
+        apiVersion: els.apiVersion.value.trim(),
+        model: els.model.value.trim(),
+        quality: els.quality.value,
+        n: Math.max(1, Math.min(10, Number(els.n.value || 1))),
+        requestTimeoutMs: Math.max(30, Math.min(1800, Number(els.requestTimeout.value || 360))) * 1000,
+        outputFormat: els.outputFormat.value,
+        size: els.size.value,
+        customW: els.customW.value,
+        customH: els.customH.value,
+        compression: Math.max(0, Math.min(100, Number(els.compression.value || 92))),
+        background: els.background.value,
+        stream: !!els.stream.checked,
+        chatExtraParams: !!els.chatExtraParams.checked,
+        mediaResolution: els.mediaResolution?.value || 'ultra',
+        saveNamePrefix: els.saveNamePrefix.value.trim() || DEFAULT_SAVE_PREFIXES[state.apiFormat],
+        prompt: els.prompt.value.trim(),
+        files
+      };
+    }
+
+    async function refreshReferenceFilesCacheAndPersist() {
+      try {
+        const records = await mapWithConcurrency(state.files.slice(0, 16), 4, async (file) => {
+          const dataUrl = await fileToDataUrlCached(file);
+          return {
+            name: file.name || 'image.png',
+            type: file.type || 'image/png',
+            size: file.size || 0,
+            lastModified: file.lastModified || Date.now(),
+            dataUrl
+          };
+        });
+        state.referenceFiles = records;
+        requestPersistSnapshot(false);
+      } catch (e) {
+        console.warn('保存参考图失败:', e);
+        setStatus('参考图保存失败，刷新后可能无法恢复', 'warn');
+      }
+    }
+
+    function addFiles(fileList) {
+      const incoming = Array.from(fileList || []).filter(f => f && f.type && f.type.startsWith('image/'));
+      const room = Math.max(0, 16 - state.files.length);
+      state.files.push(...incoming.slice(0, room));
+      if (incoming.length > room) setStatus('已达到 16 张参考图上限，多余图片被忽略', 'warn');
+      renderPreviews();
+      updateEndpointBadge();
+      refreshReferenceFilesCacheAndPersist();
+    }
+    function clearReferenceDragHints() {
+      els.previewGrid.querySelectorAll('.drag-over-before, .drag-over-after, .dragging').forEach(node => {
+        node.classList.remove('drag-over-before', 'drag-over-after', 'dragging');
+      });
+    }
+    function reorderReferenceImages(fromIndex, toIndex) {
+      const from = Number(fromIndex);
+      let to = Number(toIndex);
+      if (!Number.isInteger(from) || !Number.isInteger(to)) return;
+      if (from < 0 || from >= state.files.length) return;
+      to = Math.max(0, Math.min(state.files.length - 1, to));
+      if (from === to) return;
+
+      const [file] = state.files.splice(from, 1);
+      state.files.splice(to, 0, file);
+
+      // referenceFiles 是刷新后恢复用的缓存；长度一致时同步挪动，随后再后台重建一遍确保准确。
+      const cacheWasAligned = Array.isArray(state.referenceFiles) && state.referenceFiles.length === state.files.length;
+      if (cacheWasAligned) {
+        const [record] = state.referenceFiles.splice(from, 1);
+        state.referenceFiles.splice(to, 0, record);
+      }
+
+      renderPreviews(false);
+      updateEndpointBadge();
+      if (cacheWasAligned) requestPersistSnapshot(false);
+      else refreshReferenceFilesCacheAndPersist();
+      setStatus(`参考图顺序已调整：图 ${from + 1} → 图 ${to + 1}`, 'ok');
+    }
+    function bindReferenceDragSort() {
+      const cards = Array.from(els.previewGrid.querySelectorAll('[data-ref-index]'));
+      cards.forEach(card => {
+        card.addEventListener('dragstart', (e) => {
+          const idx = Number(card.dataset.refIndex);
+          state.referenceDragIndex = idx;
+          card.classList.add('dragging');
+          try {
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/plain', String(idx));
+          } catch {}
+        });
+        card.addEventListener('dragend', () => {
+          state.referenceDragIndex = null;
+          clearReferenceDragHints();
+          els.dropZone.classList.remove('drop-active');
+        });
+        card.addEventListener('dragover', (e) => {
+          if (state.referenceDragIndex == null) return;
+          e.preventDefault();
+          e.stopPropagation();
+          clearReferenceDragHints();
+          const rect = card.getBoundingClientRect();
+          const before = e.clientX < rect.left + rect.width / 2;
+          card.classList.add(before ? 'drag-over-before' : 'drag-over-after');
+          try { e.dataTransfer.dropEffect = 'move'; } catch {}
+        });
+        card.addEventListener('drop', (e) => {
+          if (state.referenceDragIndex == null) return;
+          e.preventDefault();
+          e.stopPropagation();
+          const from = Number.isInteger(state.referenceDragIndex) ? state.referenceDragIndex : Number(e.dataTransfer.getData('text/plain'));
+          const target = Number(card.dataset.refIndex);
+          const rect = card.getBoundingClientRect();
+          const before = e.clientX < rect.left + rect.width / 2;
+          let to = before ? target : target + 1;
+          if (from < to) to -= 1;
+          to = Math.max(0, Math.min(state.files.length - 1, to));
+          state.referenceDragIndex = null;
+          clearReferenceDragHints();
+          reorderReferenceImages(from, to);
+        });
+      });
+
+      // 拖到预览列表空白处时，默认移动到最后；同时阻止冒泡，避免被外层 dropZone 当作“上传新文件”。
+      els.previewGrid.ondragover = (e) => {
+        if (state.referenceDragIndex == null) return;
+        e.preventDefault();
+        e.stopPropagation();
+        try { e.dataTransfer.dropEffect = 'move'; } catch {}
+      };
+      els.previewGrid.ondrop = (e) => {
+        if (state.referenceDragIndex == null) return;
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.target.closest?.('[data-ref-index]')) return;
+        const from = state.referenceDragIndex;
+        state.referenceDragIndex = null;
+        clearReferenceDragHints();
+        reorderReferenceImages(from, state.files.length - 1);
+      };
+    }
+    function renderPreviews(shouldPersist = true) {
+      els.previewGrid.innerHTML = '';
+      state.files.forEach((file, idx) => {
+        const url = URL.createObjectURL(file);
+        const card = document.createElement('div');
+        card.className = 'ref-preview-card group relative w-36 shrink-0 overflow-hidden rounded-xl border border-slate-700 bg-slate-900';
+        card.draggable = true;
+        card.dataset.refIndex = String(idx);
+        card.title = '拖动可调整参考图顺序';
+        card.innerHTML = `
+          <img src="${url}" alt="" draggable="false" class="h-28 w-full object-cover" onload="URL.revokeObjectURL(this.src)">
+          <div class="p-2 text-left">
+            <div class="truncate text-[11px] text-white">${escapeHtml(file.name || 'image')}</div>
+            <div class="mt-0.5 flex items-center justify-between gap-2 text-[10px] text-slate-400">
+              <span>${formatBytes(file.size)} · 图 ${idx + 1}</span>
+              <span class="rounded border border-blue-500/25 bg-blue-500/10 px-1.5 py-0.5 text-blue-200">拖动排序</span>
+            </div>
+          </div>
+          <button data-remove="${idx}" draggable="false" class="absolute right-2 top-2 rounded-full bg-black/70 px-2 py-1 text-[11px] text-white opacity-100 md:opacity-0 md:group-hover:opacity-100">移除</button>`;
+        els.previewGrid.appendChild(card);
+      });
+      bindReferenceDragSort();
+      els.previewGrid.querySelectorAll('[data-remove]').forEach(btn => btn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const index = Number(btn.dataset.remove);
+        const cacheWasAligned = state.referenceFiles.length === state.files.length;
+        state.files.splice(index, 1);
+        if (cacheWasAligned) state.referenceFiles.splice(index, 1);
+        renderPreviews(false);
+        updateEndpointBadge();
+        if (cacheWasAligned) requestPersistSnapshot(false);
+        else refreshReferenceFilesCacheAndPersist();
+      }));
+      if (shouldPersist) requestPersistSnapshot(false);
+    }
+
+    async function mapWithConcurrency(items, limit, mapper) {
+      const list = Array.from(items || []);
+      const results = new Array(list.length);
+      let cursor = 0;
+      const workers = Array.from({ length: Math.min(Math.max(1, limit), list.length) }, async () => {
+        while (cursor < list.length) {
+          const index = cursor++;
+          results[index] = await mapper(list[index], index);
+        }
+      });
+      await Promise.all(workers);
+      return results;
+    }
+    function canvasToBlob(canvas, type, quality) {
+      return new Promise((resolve, reject) => {
+        canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('图片编码失败')), type, quality);
+      });
+    }
+    async function decodeImageSource(file) {
+      if ('createImageBitmap' in window) {
+        try {
+          return await createImageBitmap(file);
+        } catch (e) {
+          console.warn('createImageBitmap 解码失败，已回退到 Image', e);
+        }
+      }
+      const url = URL.createObjectURL(file);
+      try {
+        const image = new Image();
+        image.decoding = 'async';
+        const loaded = new Promise((resolve, reject) => {
+          image.onload = resolve;
+          image.onerror = () => reject(new Error(`解码图片失败：${file.name}`));
+        });
+        image.src = url;
+        if (image.decode) await image.decode().catch(() => loaded);
+        else await loaded;
+        return image;
+      } finally {
+        URL.revokeObjectURL(url);
+      }
+    }
+    function optimizeFile(file) {
+      if (!els.optimizeInput.checked) return Promise.resolve(file);
+      const maxEdge = Number(els.maxEdge.value || 2048);
+      const quality = Math.max(0.6, Math.min(1, Number(els.inputQuality.value || 92) / 100));
+      const cacheKey = `${maxEdge}:${quality}:${file.type || ''}`;
+      const cached = optimizedFileCache.get(file);
+      if (cached?.key === cacheKey) return cached.promise;
+
+      const promise = (async () => {
+        const source = await decodeImageSource(file);
+        try {
+          let width = source.width || source.naturalWidth;
+          let height = source.height || source.naturalHeight;
+          if (!width || !height) throw new Error(`无法读取图片尺寸：${file.name}`);
+          const scale = Math.min(1, maxEdge / Math.max(width, height));
+          width = Math.max(1, Math.round(width * scale));
+          height = Math.max(1, Math.round(height * scale));
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d', { alpha: file.type === 'image/png' });
+          if (!ctx) throw new Error('浏览器无法创建图片画布');
+          ctx.drawImage(source, 0, 0, width, height);
+          const targetMime = file.type === 'image/png' ? 'image/png' : 'image/jpeg';
+          const blob = await canvasToBlob(canvas, targetMime, targetMime === 'image/png' ? undefined : quality);
+          canvas.width = 1;
+          canvas.height = 1;
+          const ext = targetMime === 'image/png' ? '.png' : '.jpg';
+          const cleanName = (file.name || 'image').replace(/\.[^.]+$/, ext);
+          return new File([blob], cleanName, { type: targetMime, lastModified: file.lastModified || Date.now() });
+        } finally {
+          source.close?.();
+        }
+      })();
+      optimizedFileCache.set(file, { key: cacheKey, promise });
+      promise.catch(() => {
+        if (optimizedFileCache.get(file)?.promise === promise) optimizedFileCache.delete(file);
+      });
+      return promise;
+    }
+    function fileToDataUrl(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onerror = () => reject(new Error(`读取图片失败：${file.name}`));
+        reader.onload = () => resolve(reader.result);
+        reader.readAsDataURL(file);
+      });
+    }
+    function fileToDataUrlCached(file) {
+      let promise = fileDataUrlCache.get(file);
+      if (!promise) {
+        promise = fileToDataUrl(file);
+        fileDataUrlCache.set(file, promise);
+        promise.catch(() => {
+          if (fileDataUrlCache.get(file) === promise) fileDataUrlCache.delete(file);
+        });
+      }
+      return promise;
+    }
+
+    function createTask(index, inputSnapshot) {
+      return {
+        id: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+        index,
+        queueSeq: state.nextQueueSeq++,
+        status: 'queued',
+        statusText: '队列中',
+        provider: inputSnapshot.apiFormat,
+        apiMode: inputSnapshot.apiMode,
+        prompt: inputSnapshot.prompt,
+        input: inputSnapshot,
+        images: [],
+        error: '',
+        duration: 0,
+        retryAttempt: 0,
+        retryMessage: '',
+        retryAt: 0,
+        startedAt: 0,
+        finishedAt: 0,
+        request: null,
+        response: null,
+        createdAt: Date.now()
+      };
+    }
+
+    function statusUi(task) {
+      const map = {
+        queued: ['text-yellow-300', '队列中'],
+        requesting: ['text-blue-300', '请求中'],
+        retry_wait: ['text-amber-300', '429 等待重试'],
+        receiving: ['text-cyan-300', '接收中'],
+        parsing: ['text-indigo-300', '解析图片'],
+        success: ['text-emerald-300', '成功'],
+        failed: ['text-red-300', '失败'],
+        stopped: ['text-amber-300', '已停止'],
+        cancelled: ['text-slate-300', '已取消']
+      };
+      const [cls, label] = map[task.status] || ['text-slate-300', task.status || '未知'];
+      return { cls, label };
+    }
+    function updateTask(taskId, patch, options = {}) {
+      const task = state.tasks.find(t => t.id === taskId);
+      if (!task) return;
+      Object.assign(task, patch || {});
+      markTaskStorageDirty(task);
+      requestTaskRender();
+      requestPersistSnapshot(!!options.immediate);
+    }
+    function conciseTaskMessage(task) {
+      const reason = classifyTaskProblem(task, task.response || null, null);
+      if (task.status === 'failed') {
+        const extra = getResponseTextPreview(task.response || {});
+        const safeExtra = extra ? `：${extra.replace(/\s+/g, ' ').slice(0, 70)}` : '';
+        if (/responsemodalities/i.test(extra)) return 'Gemini API 版本不兼容：官方图片接口请使用 v1beta';
+        if (reason === '内容被安全策略拦截') return '内容被安全策略拦截：请调整提示词后重试';
+        if (reason === '接口成功但无图片返回') return `接口成功但没有生成图片${safeExtra}`;
+        if (reason === '请求或上游超时') return '请求或上游超时：建议降低并发、尺寸后重试';
+        if (reason === '请求参数或 Payload 不兼容') return '参数不兼容：可关闭附加图片参数后重试';
+        if (reason === '服务端 HTTP 429（RESOURCE_EXHAUSTED）') return 'Google Vertex 返回 HTTP 429（RESOURCE_EXHAUSTED）';
+        return reason;
+      }
+      if (task.status === 'cancelled') return task.error || '已取消排队，未发送请求';
+      if (task.status === 'stopped') return '任务已停止';
+      return '等待结果...';
+    }
+
+    function renderTasks() {
+      if (!state.tasks.length) {
+        els.taskGrid.innerHTML = $('emptyTaskTpl').innerHTML;
+        syncRunControls();
+        return;
+      }
+      const visibleTasks = state.tasks.slice(0, Math.min(state.renderLimit || INITIAL_RENDER_LIMIT, state.tasks.length));
+      const queuePositionById = new Map(getQueuedTasks().map((task, index) => [task.id, index + 1]));
+      const fragment = document.createDocumentFragment();
+      visibleTasks.forEach(task => {
+        const { cls, label } = statusUi(task);
+        const card = document.createElement('article');
+        card.className = 'glass overflow-hidden rounded-2xl';
+        const isQueued = task.status === 'queued';
+        const queuePosition = isQueued ? (queuePositionById.get(task.id) || 1) : 0;
+        const isRunning = ['requesting', 'retry_wait', 'receiving', 'parsing'].includes(task.status);
+        const retryable = ['failed', 'stopped', 'cancelled', 'success'].includes(task.status);
+        const placeholderText = task.status === 'success' && (!task.images || !task.images.length)
+          ? '历史图片未加载或已清理，可重新生成'
+          : task.status === 'failed'
+            ? escapeHtml(conciseTaskMessage(task))
+            : task.status === 'stopped'
+              ? '任务已停止'
+              : task.status === 'cancelled'
+                ? escapeHtml(task.error || '已取消排队，未发送请求')
+                : task.status === 'retry_wait'
+                  ? `${escapeHtml(task.retryMessage || '当前任务等待后切换下一组 Vertex 凭据重试')}...`
+                : isQueued
+                  ? `排队中，第 ${queuePosition} 位，尚未发送请求...`
+                  : '等待结果...';
+        const imagesHtml = task.images && task.images.length ? `
+          <div class="grid grid-cols-1 gap-3 ${task.images.length > 1 ? 'sm:grid-cols-2' : ''}">
+            ${task.images.map((img, idx) => `
+              <div class="overflow-hidden rounded-xl border border-slate-800 bg-slate-950/80">
+                <div data-viewimg="${task.id}:${idx}" role="button" tabindex="0" class="block w-full cursor-zoom-in bg-slate-950" title="点击预览原始尺寸">
+                  <img src="${escapeHtml(imageDisplaySrc(img))}" loading="lazy" decoding="async" class="pointer-events-none max-h-[460px] w-full object-contain bg-slate-950" alt="task image ${idx + 1}">
+                </div>
+                <div class="flex flex-wrap items-center justify-between gap-2 p-2.5">
+                  <div class="text-[11px] text-slate-400">${(img.format || 'png').toUpperCase()} · 图 ${idx + 1}${img.width && img.height ? ` · ${img.width}×${img.height}` : ''}${img.size ? ` · ${formatBytes(img.size)}` : ''}</div>
+                  <div class="flex gap-2">
+                    <button data-copyimg="${task.id}:${idx}" class="btn rounded-lg border border-slate-700 bg-slate-950 px-2.5 py-1 text-[11px] hover:bg-slate-800">复制</button>
+                    <button data-dlimg="${task.id}:${idx}" class="btn rounded-lg bg-blue-600 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-blue-500">下载</button>
+                  </div>
+                </div>
+              </div>`).join('')}
+          </div>` : `
+          <div class="rounded-xl border border-dashed border-slate-800 bg-slate-950/50 p-4 text-sm text-slate-500">
+            ${placeholderText}
+          </div>`;
+
+        const statusDetail = isQueued
+          ? ` · 第${queuePosition}位${queuePosition > 1 ? `，前方${queuePosition - 1}` : ''}`
+          : task.status === 'failed'
+            ? ` · ${escapeHtml(classifyTaskProblem(task, task.response || null, null))}`
+            : task.status === 'cancelled' && task.error
+              ? ` · ${escapeHtml(task.error.slice(0, 20))}`
+              : '';
+        const localSaveHtml = task.localSave ? `
+          <div class="rounded-xl border ${task.localSave.ok ? 'border-emerald-500/25 bg-emerald-500/8 text-emerald-200' : 'border-amber-500/25 bg-amber-500/10 text-amber-100'} px-3 py-2 text-[11px]">${escapeHtml(task.localSave.message || '')}</div>` : '';
+        const actionButtons = `
+          ${task.request || task.response ? `<button data-raw="${task.id}" class="btn rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-[11px] hover:bg-slate-800">查看 RAW</button>` : ''}
+          ${isQueued ? `<button data-cancelqueue="${task.id}" class="btn rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-1.5 text-[11px] text-amber-200 hover:bg-amber-500/20">取消排队</button>` : ''}
+          ${isRunning ? `<button data-cancelrun="${task.id}" class="btn rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-1.5 text-[11px] text-amber-200 hover:bg-amber-500/20">取消发送</button>` : ''}
+          ${retryable ? `<button data-retry="${task.id}" class="btn rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-[11px] hover:bg-slate-800">重试</button>` : ''}
+          <button data-delete="${task.id}" class="btn rounded-lg border border-red-500/35 bg-red-500/10 px-3 py-1.5 text-[11px] text-red-200 hover:bg-red-500/18">删除</button>
+          ${task.images && task.images.length > 1 ? `<button data-dlzip="${task.id}" class="btn rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-[11px] hover:bg-slate-800">下载本卡 ZIP</button>` : ''}
+        `;
+        const sendMeta = getTaskSendMeta(task);
+
+        card.innerHTML = `
+          <div class="flex items-center justify-between gap-2 border-b border-slate-800 px-4 py-3">
+            <div class="min-w-0">
+              <div class="flex items-center gap-2">
+                <span class="rounded-md border border-slate-700 bg-slate-900/80 px-2 py-0.5 text-[10px] text-slate-400">#${task.index}</span>
+                <span class="truncate text-sm font-medium">${escapeHtml((task.prompt || '未命名任务').slice(0, 44) || '未命名任务')}</span>
+              </div>
+              <div class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-slate-500">
+                <span class="mono">${task.provider.toUpperCase()}</span>
+                <span>·</span>
+                <span class="mono">${task.apiMode}</span>
+                ${task.duration ? `<span>· ${task.duration.toFixed(1)}s</span>` : ''}
+                <span>·</span>
+                <span class="min-w-0 max-w-full truncate mono text-slate-400" title="${escapeHtml(`${sendMeta.quality} · ${sendMeta.size}${sendMeta.mediaResolution ? ` · ${sendMeta.mediaResolution}` : ''} · ${sendMeta.endpoint}`)}">${escapeHtml(sendMeta.quality)} · ${escapeHtml(sendMeta.size)}${sendMeta.mediaResolution ? ` · ${escapeHtml(sendMeta.mediaResolution)}` : ''} · ${escapeHtml(sendMeta.endpoint)}</span>
+              </div>
+            </div>
+            <span class="shrink-0 rounded-full border border-slate-700 bg-slate-900/70 px-2.5 py-1 text-[11px] ${cls}">${label}${statusDetail}</span>
+          </div>
+          <div class="space-y-3 p-4">
+            ${imagesHtml}
+            ${localSaveHtml}
+            <div class="flex flex-wrap gap-2">${actionButtons}</div>
+          </div>`;
+        fragment.appendChild(card);
+      });
+
+      if (visibleTasks.length < state.tasks.length) {
+        const more = document.createElement('div');
+        more.className = 'col-span-full flex justify-center py-4';
+        more.innerHTML = `<button data-loadmore="true" class="btn rounded-xl border border-slate-700 bg-slate-900 px-5 py-2 text-xs text-slate-200 hover:bg-slate-800">加载更多历史记录（${visibleTasks.length}/${state.tasks.length}）</button>`;
+        fragment.appendChild(more);
+      }
+      els.taskGrid.replaceChildren(fragment);
+      syncRunControls();
+    }
+
+    function handleTaskGridClick(event) {
+      const target = event.target.closest('[data-raw],[data-retry],[data-delete],[data-cancelqueue],[data-cancelrun],[data-dlimg],[data-copyimg],[data-viewimg],[data-dlzip],[data-loadmore]');
+      if (!target || !els.taskGrid.contains(target)) return;
+      if (target.dataset.loadmore) {
+        state.renderLimit = Math.min(state.tasks.length, (state.renderLimit || INITIAL_RENDER_LIMIT) + RENDER_INCREMENT);
+        renderTasks();
+        return;
+      }
+      if (target.dataset.raw) return openRawModal(target.dataset.raw);
+      if (target.dataset.retry) return retryTask(target.dataset.retry);
+      if (target.dataset.delete) return deleteTask(target.dataset.delete);
+      if (target.dataset.cancelqueue) return cancelQueuedTask(target.dataset.cancelqueue);
+      if (target.dataset.cancelrun) return cancelRunningTask(target.dataset.cancelrun);
+      if (target.dataset.dlzip) return downloadTaskZip(target.dataset.dlzip);
+      const imageRef = target.dataset.dlimg || target.dataset.copyimg || target.dataset.viewimg;
+      if (!imageRef) return;
+      const [taskId, indexText] = imageRef.split(':');
+      const index = Number(indexText);
+      if (target.dataset.dlimg) return downloadTaskImage(taskId, index);
+      if (target.dataset.copyimg) return copyTaskImage(taskId, index);
+      openImageViewer(taskId, index);
+    }
+    function handleTaskGridKeydown(event) {
+      if (!['Enter', ' '].includes(event.key)) return;
+      const target = event.target.closest('[data-viewimg]');
+      if (!target) return;
+      event.preventDefault();
+      target.click();
+    }
+
+    function extractImages(root) {
+      const found = [];
+      const seen = new Set();
+      const addBase64 = (base64, format = els.outputFormat.value, meta = {}) => {
+        if (!base64 || typeof base64 !== 'string') return;
+        const clean = base64.replace(/^data:image\/[^;]+;base64,/, '').trim();
+        if (clean.length < 80) return;
+        const key = `b64:${clean.slice(0, 80)}:${clean.length}`;
+        if (seen.has(key)) return;
+        seen.add(key);
+        found.push({ src: `data:image/${format === 'jpg' ? 'jpeg' : format};base64,${clean}`, base64: clean, format: format === 'jpg' ? 'jpeg' : format, meta });
+      };
+      const addUrl = (url, meta = {}) => {
+        if (!url || typeof url !== 'string') return;
+        const m = url.match(/^data:image\/(png|jpeg|jpg|webp);base64,([A-Za-z0-9+/=\s]+)$/i);
+        if (m) return addBase64(m[2].replace(/\s/g, ''), m[1] === 'jpg' ? 'jpeg' : m[1], meta);
+        if (!/^https?:\/\//i.test(url)) return;
+        const key = `url:${url}`;
+        if (seen.has(key)) return;
+        seen.add(key);
+        found.push({ src: url, format: 'png', meta });
+      };
+      const walk = (obj, key = '', parent = null) => {
+        if (obj == null) return;
+        if (typeof obj === 'string') {
+          const s = obj.trim();
+          const dataUrlRegex = /data:image\/(png|jpeg|jpg|webp);base64,([A-Za-z0-9+/=\s]+)/ig;
+          let m;
+          while ((m = dataUrlRegex.exec(s))) addBase64(m[2].replace(/\s/g, ''), m[1] === 'jpg' ? 'jpeg' : m[1], { source: key });
+          if (/^(url|image_url)$/i.test(key)) addUrl(s, parent || {});
+          if (/^(b64_json|base64|image_base64|result|data)$/i.test(key) && /^[A-Za-z0-9+/=\s]+$/.test(s) && s.length > 200) addBase64(s.replace(/\s/g, ''), parent?.output_format || parent?.format || els.outputFormat.value, parent || {});
+          return;
+        }
+        if (Array.isArray(obj)) return obj.forEach(v => walk(v, key, parent));
+        if (typeof obj !== 'object') return;
+        const inline = obj.inlineData || obj.inline_data;
+        if (inline?.data) addBase64(inline.data, inline.mimeType?.split('/')[1] || inline.mime_type?.split('/')[1] || els.outputFormat.value, obj);
+        if (obj.b64_json) addBase64(obj.b64_json, obj.output_format || obj.format || els.outputFormat.value, obj);
+        if (typeof obj.image_url === 'string') addUrl(obj.image_url, obj);
+        if (obj.image_url && typeof obj.image_url === 'object') addUrl(obj.image_url.url, obj.image_url);
+        if (obj.url) addUrl(obj.url, obj);
+        Object.entries(obj).forEach(([k, v]) => walk(v, k, obj));
+      };
+      walk(root);
+      return found;
+    }
+
+    function isGeminiThoughtImage(image = {}) {
+      const meta = image?.meta || {};
+      const type = String(meta.type || meta.kind || meta.role || '').toLowerCase();
+      return meta.thought === true || meta.isThought === true || meta.is_thought === true || /(?:^|[_-])thought(?:[_-]|$)/.test(type);
+    }
+    function imageResolutionScore(image = {}) {
+      const pixels = Number(image.width || 0) * Number(image.height || 0);
+      if (pixels > 0) return pixels;
+      if (typeof image.base64 === 'string') return image.base64.length;
+      if (typeof image.src === 'string' && image.src.startsWith('data:image/')) return image.src.length;
+      return Number(image.size || 0);
+    }
+    function selectFinalGeminiImage(images = []) {
+      const list = Array.isArray(images) ? images.filter(Boolean) : [];
+      if (list.length <= 1) return list;
+      const nonThought = list.filter(image => !isGeminiThoughtImage(image));
+      const candidates = nonThought.length ? nonThought : list;
+      const last = candidates[candidates.length - 1];
+      const largest = candidates.reduce((best, image) => (
+        imageResolutionScore(image) > imageResolutionScore(best) ? image : best
+      ), candidates[0]);
+      // Gemini 通常把最终图放在最后；若最后一张明显只是小预览，则以大图兜底。
+      const lastScore = imageResolutionScore(last);
+      const largestScore = imageResolutionScore(largest);
+      return [largestScore > lastScore * 1.5 ? largest : last];
+    }
+    function pruneGeminiTaskResults(tasks = []) {
+      const discardedKeys = [];
+      tasks.forEach(task => {
+        const isGemini = ['gemini', 'vertex'].includes(String(task?.provider || task?.input?.apiFormat || '').toLowerCase());
+        if (!isGemini || !Array.isArray(task.images) || task.images.length <= 1) return;
+        const selected = selectFinalGeminiImage(task.images)[0];
+        task.images.forEach(image => {
+          if (image !== selected && image?.imageKey) discardedKeys.push(image.imageKey);
+        });
+        task.images = selected ? [selected] : [];
+        markTaskStorageDirty(task);
+      });
+      return discardedKeys;
+    }
+
+    async function createImageThumbnail(blob, maxEdge = THUMB_MAX_EDGE) {
+      return new Promise((resolve) => {
+        const url = URL.createObjectURL(blob);
+        const img = new Image();
+        img.onload = () => {
+          try {
+            const scale = Math.min(1, maxEdge / Math.max(img.naturalWidth || 1, img.naturalHeight || 1));
+            const w = Math.max(1, Math.round((img.naturalWidth || 1) * scale));
+            const h = Math.max(1, Math.round((img.naturalHeight || 1) * scale));
+            const canvas = document.createElement('canvas');
+            canvas.width = w;
+            canvas.height = h;
+            const ctx = canvas.getContext('2d', { alpha: true });
+            ctx.drawImage(img, 0, 0, w, h);
+            const finishThumb = async (thumbBlob) => {
+              URL.revokeObjectURL(url);
+              if (!thumbBlob) return resolve({ thumbSrc: '', width: img.naturalWidth || 0, height: img.naturalHeight || 0 });
+              try {
+                const thumbSrc = await blobToDataUrl(thumbBlob);
+                resolve({ thumbSrc, width: img.naturalWidth || 0, height: img.naturalHeight || 0, thumbBytes: thumbBlob.size || 0 });
+              } catch {
+                resolve({ thumbSrc: '', width: img.naturalWidth || 0, height: img.naturalHeight || 0 });
+              }
+            };
+            canvas.toBlob(thumbBlob => {
+              if (thumbBlob) return finishThumb(thumbBlob);
+              canvas.toBlob(finishThumb, 'image/jpeg', 0.78);
+            }, 'image/webp', 0.78);
+          } catch (e) {
+            URL.revokeObjectURL(url);
+            resolve({ thumbSrc: '', width: 0, height: 0 });
+          }
+        };
+        img.onerror = () => {
+          URL.revokeObjectURL(url);
+          resolve({ thumbSrc: '', width: 0, height: 0 });
+        };
+        img.src = url;
+      });
+    }
+    async function imageItemToBlob(item) {
+      if (!item) return null;
+      if (item.imageKey) {
+        const stored = await dbGetImage(item.imageKey);
+        const blob = stored?.blob || stored || null;
+        if (blob) return blob;
+      }
+      if (typeof item.src === 'string' && item.src.startsWith('data:image/')) return dataUrlToBlob(item.src);
+      if (typeof item.thumbSrc === 'string' && item.thumbSrc.startsWith('data:image/')) return dataUrlToBlob(item.thumbSrc);
+      if (typeof item.src === 'string' && /^https?:\/\//i.test(item.src)) return fetch(item.src).then(r => r.blob());
+      return null;
+    }
+    async function prepareTaskImagesForStorage(taskId, images = []) {
+      const out = [];
+      for (let idx = 0; idx < images.length; idx++) {
+        const img = images[idx] || {};
+        const format = imageFormatFromType(img.format ? `image/${img.format}` : '', img.format || els.outputFormat.value || 'png');
+        try {
+          const blob = await imageItemToBlob(img);
+          if (!blob) {
+            out.push({ ...img, format, meta: compactLargeStrings(img.meta || {}) });
+            continue;
+          }
+          const key = `${taskId}_${idx}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+          const thumb = await createImageThumbnail(blob);
+          await dbSetImage(key, {
+            blob,
+            type: blob.type || `image/${format}`,
+            format: imageFormatFromType(blob.type, format),
+            size: blob.size || 0,
+            createdAt: Date.now()
+          });
+          out.push({
+            imageKey: key,
+            src: thumb.thumbSrc || img.src,
+            thumbSrc: thumb.thumbSrc || '',
+            format: imageFormatFromType(blob.type, format),
+            width: thumb.width || 0,
+            height: thumb.height || 0,
+            size: blob.size || 0,
+            meta: compactLargeStrings(img.meta || {})
+          });
+        } catch (e) {
+          console.warn('prepare image storage failed', e);
+          out.push({ ...img, format, meta: compactLargeStrings(img.meta || {}) });
+        }
+      }
+      return out;
+    }
+    async function migrateLegacyTaskImages() {
+      const legacy = [];
+      state.tasks.forEach(task => (task.images || []).forEach((img, idx) => {
+        if (!img.imageKey && typeof img.src === 'string' && img.src.startsWith('data:image/')) legacy.push({ task, img, idx });
+      }));
+      if (!legacy.length) return;
+      setStatus(`正在优化历史图片缓存 ${legacy.length} 张，首次处理后下次打开会更快...`, 'warn');
+      for (const { task, idx } of legacy) {
+        const current = task.images?.[idx];
+        if (!current || current.imageKey) continue;
+        const prepared = await prepareTaskImagesForStorage(task.id || `legacy_${task.index || Date.now()}`, [current]);
+        if (prepared[0]) {
+          task.images[idx] = prepared[0];
+          markTaskStorageDirty(task);
+        }
+      }
+      renderTasks();
+      syncRunControls();
+      setStatus('历史图片缓存已优化完成', 'ok');
+    }
+    function collectImageKeys(tasks = []) {
+      const keys = [];
+      tasks.forEach(task => (task.images || []).forEach(img => { if (img?.imageKey) keys.push(img.imageKey); }));
+      return keys;
+    }
+    async function deleteImageKeys(keys = []) {
+      for (const key of keys) {
+        try { await dbDeleteImage(key); } catch (e) { console.warn('delete image blob failed', e); }
+      }
+    }
+    async function getTaskImageBlobByIds(taskId, index) {
+      const task = state.tasks.find(t => t.id === taskId);
+      const item = task?.images?.[index];
+      return item ? imageItemToBlob(item) : null;
+    }
+    async function getTaskImageObjectUrl(item) {
+      const blob = await imageItemToBlob(item);
+      if (blob) return { src: URL.createObjectURL(blob), objectUrl: true };
+      return { src: imageDisplaySrc(item), objectUrl: false };
+    }
+
+    function endpointBaseFromInput(input, vertexCredential = null) {
+      const base = (input.baseUrl || DEFAULT_CONNECTIONS[input.apiFormat]?.baseUrl || DEFAULT_CONNECTIONS.openai.baseUrl).replace(/\/+$/, '');
+      let ver = normalizeApiVersion(input.apiFormat, base, input.apiVersion, input.apiMode);
+      if (input.apiFormat === 'vertex' && isOfficialAgentPlatformBaseUrl(base) && usesVertexExpressEndpoint(vertexCredential)) ver = 'v1beta1';
+      return `${base}/${ver}`;
+    }
+    function getSizeValueFromInput(input) {
+      if ((input.size || 'auto') === 'auto') return 'auto';
+      const w = Math.max(16, Math.round(Number(input.customW || 1024) / 16) * 16);
+      const h = Math.max(16, Math.round(Number(input.customH || 1024) / 16) * 16);
+      return `${w}x${h}`;
+    }
+    function nearestGeminiAspectRatio(width, height) {
+      const ratios = [
+        ['1:8', 1 / 8], ['1:4', 1 / 4], ['2:3', 2 / 3], ['9:16', 9 / 16],
+        ['3:4', 3 / 4], ['4:5', 4 / 5], ['1:1', 1], ['5:4', 5 / 4],
+        ['4:3', 4 / 3], ['3:2', 3 / 2], ['16:9', 16 / 9], ['21:9', 21 / 9],
+        ['4:1', 4], ['8:1', 8]
+      ];
+      const target = Math.max(1, width) / Math.max(1, height);
+      return ratios.reduce((best, item) => (
+        Math.abs(Math.log(target / item[1])) < Math.abs(Math.log(target / best[1])) ? item : best
+      ), ratios[0])[0];
+    }
+    function getGeminiImageConfig(input) {
+      if ((input.size || 'auto') === 'auto') return null;
+      const width = Math.max(16, Number(input.customW || 1024));
+      const height = Math.max(16, Number(input.customH || 1024));
+      const model = String(input.model || '').replace(/^models\//, '');
+      const config = { aspectRatio: nearestGeminiAspectRatio(width, height) };
+      if (/^gemini-3\.1-flash-lite-image(?:$|-)/i.test(model)) {
+        config.imageSize = '1K';
+      } else if (/^gemini-(?:3\.1-flash|3-pro)-image(?:$|-)/i.test(model)) {
+        const maxEdge = Math.max(width, height);
+        config.imageSize = maxEdge >= 3072 ? '4K' : maxEdge >= 1536 ? '2K' : '1K';
+      }
+      return config;
+    }
+    function getMediaResolutionKey(input) {
+      const key = String(input?.mediaResolution || 'ultra').toLowerCase();
+      return MEDIA_RESOLUTION_VALUES[key] !== undefined ? key : 'ultra';
+    }
+    function getGlobalMediaResolution(input) {
+      // V3 always uses per-Part mediaResolution for image inputs. This avoids
+      // stale/global fields and supports LOW/MEDIUM/HIGH/ULTRA_HIGH uniformly.
+      return '';
+    }
+    function getPartMediaResolution(input) {
+      const level = MEDIA_RESOLUTION_VALUES[getMediaResolutionKey(input)] || '';
+      return level ? { level } : null;
+    }
+    function getMaxQualityThinkingConfig(model = '') {
+      const id = normalizeGoogleModelId(model).toLowerCase();
+      // Gemini 3 Pro Image currently rejects an explicit thinkingLevel on the
+      // Vertex v1 image endpoint. Omitting thinkingConfig keeps the model's
+      // server-side default reasoning and does not reduce output resolution.
+      if (id.startsWith('gemini-3-pro-image')) return null;
+      // Flash Image accepts an explicit HIGH level and benefits from it on
+      // complex edit/generation prompts.
+      if (id.startsWith('gemini-3.1-flash-image')) return { thinkingLevel: 'HIGH', includeThoughts: false };
+      return null;
+    }
+    function enforceGoogleImageCompatibility(payload, input) {
+      if (!payload || typeof payload !== 'object') return payload;
+      const modelId = normalizeGoogleModelId(input?.model || '').toLowerCase();
+      const generationConfig = payload.generationConfig || (payload.generationConfig = {});
+
+      // Image generation/editing requires image response modality.
+      generationConfig.responseModalities = ['TEXT', 'IMAGE'];
+
+      // Runtime source of truth: the Vertex v1 image endpoint currently rejects
+      // explicit thinkingLevel for gemini-3-pro-image. Keep server-side default
+      // thinking by omitting the entire field; output size/quality are unchanged.
+      if (modelId.startsWith('gemini-3-pro-image')) {
+        delete generationConfig.thinkingConfig;
+      }
+
+      // Never leave a stale top-level mediaResolution in the final request.
+      // The REST Part schema supports per-media LOW/MEDIUM/HIGH/ULTRA_HIGH.
+      delete generationConfig.mediaResolution;
+      const partResolution = getPartMediaResolution(input);
+      for (const content of (payload.contents || [])) {
+        for (const part of (content?.parts || [])) {
+          if (!part?.inlineData) continue;
+          if (partResolution) part.mediaResolution = { ...partResolution };
+          else delete part.mediaResolution;
+        }
+      }
+      return payload;
+    }
+    function maskedGoogleContents(contents = []) {
+      return contents.map(content => ({
+        ...content,
+        parts: (content.parts || []).map(part => part?.inlineData?.data
+          ? { ...part, inlineData: { ...part.inlineData, data: '[base64 hidden]' } }
+          : part)
+      }));
+    }
+    function finalizeGoogleBuiltRequest(built, input) {
+      if (!built || typeof built.body !== 'string') return built;
+      let payload;
+      try { payload = JSON.parse(built.body); } catch { return built; }
+      enforceGoogleImageCompatibility(payload, input);
+      built.body = JSON.stringify(payload);
+      built.requestPreview = {
+        ...(built.requestPreview || {}),
+        contents: maskedGoogleContents(payload.contents || []),
+        generationConfig: JSON.parse(JSON.stringify(payload.generationConfig || {})),
+        safetySettings: payload.safetySettings ? JSON.parse(JSON.stringify(payload.safetySettings)) : undefined,
+        workbench_build: APP_BUILD_ID
+      };
+      if (built.requestPreview.safetySettings === undefined) delete built.requestPreview.safetySettings;
+      return built;
+    }
+    function buildIndexedGoogleParts(input) {
+      const parts = [];
+      const previewImages = [];
+      const partMediaResolution = getPartMediaResolution(input);
+      (input.files || []).forEach((file, index) => {
+        const [, b64] = String(file.dataUrl || '').split(',');
+        if ((input.files || []).length > 1) parts.push({ text: `参考图 ${index + 1}` });
+        const mediaPart = { inlineData: { mimeType: file.type || 'image/png', data: b64 } };
+        if (partMediaResolution) mediaPart.mediaResolution = { ...partMediaResolution };
+        parts.push(mediaPart);
+        previewImages.push({ name: file.name || 'image', type: file.type, size: file.size, data_base64_bytes: b64?.length || 0 });
+      });
+      // Images first improves single-image understanding; labels preserve multi-image ordering.
+      parts.push({ text: input.prompt || '' });
+      return { parts, previewImages };
+    }
+
+    function endpointPathFromInput(input, vertexCredential = null) {
+      if (input.apiFormat === 'openai') {
+        if (input.apiMode === 'chat') return '/chat/completions';
+        return (input.files || []).length ? '/images/edits' : '/images/generations';
+      }
+      const model = normalizeGoogleModelId(input.model || DEFAULT_MODELS[input.apiFormat] || DEFAULT_MODELS.gemini);
+      return input.apiFormat === 'vertex'
+        ? vertexPathForModel(model, vertexCredential)
+        : `/models/${encodeURIComponent(model)}:generateContent`;
+    }
+    function commonParamsFromInput(input) {
+      const payload = {
+        model: input.model || 'gpt-image-2',
+        prompt: input.prompt || '',
+        n: Math.max(1, Math.min(10, Number(input.n || 1))),
+        size: getSizeValueFromInput(input),
+        quality: input.quality || 'auto',
+        output_format: input.outputFormat || 'png',
+        background: input.background || 'auto'
+      };
+      if (['jpeg', 'webp'].includes(payload.output_format)) {
+        payload.output_compression = Math.max(0, Math.min(100, Number(input.compression || 92)));
+      }
+      if (input.stream) {
+        payload.stream = true;
+        payload.partial_images = 2;
+      }
+      return payload;
+    }
+    async function buildOpenAIChatRequestFromInput(input) {
+      const content = [{ type: 'text', text: input.prompt || '' }];
+      const displayImages = [];
+      for (const file of (input.files || [])) {
+        content.push({ type: 'image_url', image_url: { url: file.dataUrl } });
+        displayImages.push({ name: file.name || 'image', type: file.type, size: file.size, data_url_bytes: file.dataUrl.length });
+      }
+      const payload = {
+        model: input.model || 'gpt-image-2',
+        messages: [{ role: 'user', content }]
+      };
+      const copies = Math.max(1, Math.min(10, Number(input.n || 1)));
+      if (copies > 1) payload.n = copies;
+      if (input.stream) payload.stream = true;
+      if (input.chatExtraParams) {
+        const params = commonParamsFromInput(input);
+        payload.size = params.size;
+        payload.quality = params.quality;
+        payload.output_format = params.output_format;
+        payload.background = params.background;
+        if (params.output_compression !== undefined) payload.output_compression = params.output_compression;
+      }
+      const displayPayload = {
+        ...payload,
+        messages: payload.messages.map(msg => ({
+          ...msg,
+          content: Array.isArray(msg.content)
+            ? msg.content.map(part => part?.type === 'image_url' ? { type: 'image_url', image_url: { url: '[data URL hidden]' } } : part)
+            : msg.content
+        }))
+      };
+      return { body: JSON.stringify(payload), requestPreview: { endpoint: `${endpointBaseFromInput(input)}${endpointPathFromInput(input)}`, method: 'POST', content_type: 'application/json', ...displayPayload, uploaded_images: displayImages }, headers: { 'Content-Type': 'application/json' } };
+    }
+    async function buildOpenAIImageRequestFromInput(input) {
+      const path = endpointPathFromInput(input);
+      if (path.endsWith('/images/edits')) {
+        const params = commonParamsFromInput(input);
+        const fd = new FormData();
+        Object.entries(params).forEach(([k, v]) => { if (v !== undefined && v !== null && v !== '') fd.append(k, String(v)); });
+        for (const file of (input.files || [])) {
+          fd.append('image[]', dataUrlToFile(file.dataUrl, file.name || 'image.png', file.type || 'image/png'));
+        }
+        return {
+          body: fd,
+          requestPreview: { endpoint: `${endpointBaseFromInput(input)}${path}`, method: 'POST', content_type: 'multipart/form-data', ...params, image: (input.files || []).map(f => ({ name: f.name, type: f.type, size: f.size })) },
+          headers: {}
+        };
+      }
+      const payload = commonParamsFromInput(input);
+      return { body: JSON.stringify(payload), requestPreview: { endpoint: `${endpointBaseFromInput(input)}${path}`, method: 'POST', content_type: 'application/json', ...payload }, headers: { 'Content-Type': 'application/json' } };
+    }
+    async function buildGeminiRequestFromInput(input, requestEndpoint = '') {
+      const { parts, previewImages } = buildIndexedGoogleParts(input);
+      const payload = {
+        contents: [{ role: 'user', parts }],
+        generationConfig: { responseModalities: ['TEXT', 'IMAGE'] }
+      };
+      const mediaResolution = getGlobalMediaResolution(input);
+      if (mediaResolution) payload.generationConfig.mediaResolution = mediaResolution;
+      const imageConfig = getGeminiImageConfig(input);
+      if (imageConfig) payload.generationConfig.imageConfig = imageConfig;
+      const thinkingConfig = getMaxQualityThinkingConfig(input.model);
+      if (thinkingConfig) payload.generationConfig.thinkingConfig = thinkingConfig;
+      enforceGoogleImageCompatibility(payload, input);
+      const displayPayload = {
+        ...payload,
+        generationConfig: JSON.parse(JSON.stringify(payload.generationConfig)),
+        contents: payload.contents.map(content => ({
+          ...content,
+          parts: content.parts.map(part => part.inlineData?.data
+            ? { ...part, inlineData: { ...part.inlineData, data: '[base64 hidden]' } }
+            : part)
+        }))
+      };
+      displayPayload.uploaded_images = previewImages;
+      displayPayload.workbench_build = APP_BUILD_ID;
+      return { body: JSON.stringify(payload), requestPreview: { endpoint: requestEndpoint || `${endpointBaseFromInput(input)}${endpointPathFromInput(input)}`, method: 'POST', content_type: 'application/json', ...displayPayload }, headers: { 'Content-Type': 'application/json' } };
+    }
+
+    async function buildVertex49RequestFromInput(input, requestEndpoint = '') {
+      const { parts, previewImages } = buildIndexedGoogleParts(input);
+      const imageConfig = getGeminiImageConfig(input) || { imageSize: '2K' };
+      const generationConfig = {
+        temperature: 1,
+        responseModalities: ['TEXT', 'IMAGE'],
+        imageConfig
+      };
+      const thinkingConfig = getMaxQualityThinkingConfig(input.model);
+      if (thinkingConfig) generationConfig.thinkingConfig = thinkingConfig;
+      const mediaResolution = getGlobalMediaResolution(input);
+      if (mediaResolution) generationConfig.mediaResolution = mediaResolution;
+
+      const payload = {
+        contents: [{ role: 'user', parts }],
+        generationConfig,
+        safetySettings: VERTEX_4_9_SAFETY_SETTINGS.map(item => ({ ...item }))
+      };
+      enforceGoogleImageCompatibility(payload, input);
+      const displayPayload = {
+        ...payload,
+        generationConfig: JSON.parse(JSON.stringify(payload.generationConfig)),
+        safetySettings: payload.safetySettings.map(item => ({ ...item })),
+        contents: maskedGoogleContents(payload.contents),
+        uploaded_images: previewImages,
+        workbench_build: APP_BUILD_ID
+      };
+      return {
+        body: JSON.stringify(payload),
+        requestPreview: {
+          endpoint: requestEndpoint || `${endpointBaseFromInput(input)}${endpointPathFromInput(input)}`,
+          method: 'POST',
+          content_type: 'application/json',
+          ...displayPayload
+        },
+        headers: { 'Content-Type': 'application/json' }
+      };
+    }
+
+    function extractError(data, status, rawText = '') {
+      const err = data?.error || data?.Error || null;
+      const pieces = [];
+      if (status) pieces.push(`HTTP ${status}`);
+      if (err?.type) pieces.push(err.type);
+      if (err?.code && err.code !== err?.type) pieces.push(`code=${err.code}`);
+      const msg = err?.message || data?.message || rawText || `API Error ${status || ''}`.trim();
+      return `${pieces.length ? `[${pieces.join(' · ')}] ` : ''}${String(msg).trim()}`;
+    }
+    function headersToObject(headers) {
+      const out = {};
+      try { headers.forEach((value, key) => out[key] = value); } catch {}
+      return out;
+    }
+    async function parseJsonResponse(res) {
+      const rawText = await res.text();
+      let data = null;
+      let parseError = '';
+      try {
+        data = rawText ? JSON.parse(rawText) : {};
+      } catch (e) {
+        parseError = e?.message || 'JSON parse failed';
+        data = { error: { message: rawText || `HTTP ${res.status}` } };
+      }
+      return {
+        data,
+        rawText,
+        parseError,
+        headers: headersToObject(res.headers),
+        contentType: res.headers.get('content-type') || ''
+      };
+    }
+    function walkDiagnosticPayload(value, visit, path = '', depth = 0, seen = new WeakSet()) {
+      if (value == null || depth > 8) return;
+      if (typeof value !== 'object') {
+        visit(value, path);
+        return;
+      }
+      if (seen.has(value)) return;
+      seen.add(value);
+      if (Array.isArray(value)) {
+        value.slice(0, 80).forEach((item, index) => walkDiagnosticPayload(item, visit, `${path}[${index}]`, depth + 1, seen));
+        return;
+      }
+      Object.entries(value).forEach(([key, item]) => walkDiagnosticPayload(item, visit, path ? `${path}.${key}` : key, depth + 1, seen));
+    }
+    function getResponseSignals(responseInfo = {}) {
+      const signals = { finishReasons: [], blockReasons: [], errorCodes: [], safetyCategories: [] };
+      const addUnique = (list, value) => {
+        const text = String(value || '').trim();
+        if (text && !list.includes(text)) list.push(text);
+      };
+      walkDiagnosticPayload(responseInfo?.body || {}, (value, path) => {
+        const key = path.split('.').pop()?.replace(/\[\d+\]$/, '').toLowerCase() || '';
+        if (key === 'finishreason' || key === 'finish_reason') addUnique(signals.finishReasons, value);
+        if (key === 'blockreason' || key === 'block_reason') addUnique(signals.blockReasons, value);
+        if (key === 'status' || key === 'code' || key === 'type') addUnique(signals.errorCodes, value);
+        if (key === 'category' && /safety|rating/i.test(path)) addUnique(signals.safetyCategories, value);
+      });
+      return signals;
+    }
+    function getResponseTextPreview(responseInfo = {}) {
+      const texts = [];
+      const add = (value) => {
+        const text = typeof value === 'string' ? sanitizeSensitiveString(value).trim() : '';
+        if (text && !texts.includes(text)) texts.push(text);
+      };
+      walkDiagnosticPayload(responseInfo?.body || {}, (value, path) => {
+        const key = path.split('.').pop()?.replace(/\[\d+\]$/, '').toLowerCase() || '';
+        if (['text', 'message', 'detail', 'error_description', 'reason'].includes(key)) add(value);
+      });
+      if (!texts.length && responseInfo?.raw_text_preview) add(String(responseInfo.raw_text_preview).slice(0, 600));
+      return texts.join('\n').slice(0, 900);
+    }
+    function getImageInputTokenUsage(responseInfo = {}, task = {}) {
+      let maxImageTokens = 0;
+      const seen = new WeakSet();
+      const walk = (value, depth = 0) => {
+        if (!value || typeof value !== 'object' || depth > 10 || seen.has(value)) return;
+        seen.add(value);
+        const usage = value.usageMetadata || value.usage_metadata;
+        if (usage && typeof usage === 'object') {
+          const details = usage.promptTokensDetails || usage.prompt_tokens_details || [];
+          if (Array.isArray(details)) {
+            let imageTokens = 0;
+            details.forEach(detail => {
+              if (String(detail?.modality || '').toUpperCase() !== 'IMAGE') return;
+              imageTokens += Number(detail?.tokenCount ?? detail?.token_count ?? 0) || 0;
+            });
+            maxImageTokens = Math.max(maxImageTokens, imageTokens);
+          }
+        }
+        if (Array.isArray(value)) value.forEach(item => walk(item, depth + 1));
+        else Object.values(value).forEach(item => walk(item, depth + 1));
+      };
+      walk(responseInfo?.body || {});
+      if (!maxImageTokens) return '';
+      const imageCount = Number(task?.input?.files?.length || task?.request?.payload?.uploaded_images?.length || 0);
+      const resolutionKey = String(task?.input?.mediaResolution || 'auto').toLowerCase();
+      const resolutionLabel = MEDIA_RESOLUTION_LABELS[resolutionKey] || MEDIA_RESOLUTION_LABELS.auto;
+      const average = imageCount > 0 ? Math.round(maxImageTokens / imageCount) : 0;
+      return `参考图解析：${resolutionLabel} · IMAGE Token ${maxImageTokens}${imageCount > 0 ? `（${imageCount} 张，平均 ${average}/张）` : ''}`;
+    }
+    function classifyTaskProblem(task, responseInfo = null, error = null) {
+      const status = Number(responseInfo?.http_status || 0);
+      const duration = Number(task?.duration || responseInfo?.duration_seconds || 0);
+      const signals = getResponseSignals(responseInfo || {});
+      const msg = [error?.message, task?.error, getResponseTextPreview(responseInfo || {}), ...signals.errorCodes, ...signals.finishReasons, ...signals.blockReasons]
+        .filter(Boolean).join('\n').toLowerCase();
+      const taskStatus = String(task?.status || '').toLowerCase();
+
+      if (taskStatus === 'cancelled') return '已取消，未发送';
+      if (taskStatus === 'stopped' && !/timeout|timed out|超时/.test(msg)) return '已停止';
+      if (/aborterror|用户停止|user abort/.test(msg) && !/timeout|timed out|超时/.test(msg)) return '已停止';
+      if (/timeout|timed out|deadline[_ ]exceeded|请求超时|上游超时|总等待/.test(msg) || [408, 504, 524].includes(status) || duration >= Math.max(30, Number(task?.input?.requestTimeoutMs || DEFAULT_REQUEST_TIMEOUT_MS) / 1000)) return '请求或上游超时';
+      if (/failed to fetch|networkerror|network error|load failed|cors|cross-origin|跨域|mixed content|dns|certificate|ssl|tls/.test(msg)) return '浏览器网络或 CORS 错误';
+      if (/缺少.+api key|未配置.+key|vertex.+格式|invalid url|请输入提示词|配置错误/.test(msg)) return '客户端配置错误';
+      if (responseInfo?.parse_error || /json parse|unexpected token|invalid json|response is not valid json/.test(msg)) return '响应格式或 JSON 解析异常';
+      if (/i(?:'m| am) just a language model|can'?t help with that|cannot help with that|can'?t assist with that|content[_ ]filtered|prohibited[_ ]content|image[_ ]safety|blocked|blocklist|policy|safety|recitation|内容.{0,4}(?:拒绝|拦截)|安全策略/.test(msg)) return '内容被安全策略拦截';
+      if (status === 401 || /unauthenticated|invalid api key|api key not valid|incorrect api key|invalid[_ ]api[_ ]key|missing authentication|authentication failed/.test(msg)) return 'API Key 无效或未提供';
+      if (status === 403 || /permission[_ ]denied|forbidden|does not have permission|iam permission|consumer invalid|project.*(?:disabled|not found)|serviceusage/.test(msg)) return '权限、项目或 API 未启用';
+      if (status === 402 || /billing|payment required|credit balance|insufficient (?:balance|credits)|欠费|余额不足/.test(msg)) return '账单、余额或付费状态异常';
+      if (status === 429 || /resource[_ ]exhausted|rate limit|too many requests|quota|配额|限流/.test(msg)) return '服务端 HTTP 429（RESOURCE_EXHAUSTED）';
+      if (/overloaded|server busy|capacity|queue is full|high demand|服务繁忙/.test(msg)) return '服务过载或排队拥堵';
+      if (status === 413 || /payload too large|request entity too large|content length.*exceed|请求体过大/.test(msg)) return '请求体或参考图过大';
+      if (status === 415 || /unsupported media|unsupported image|invalid image|image decode|corrupt image|无法解码|图片格式/.test(msg)) return '图片格式不支持或文件损坏';
+      if (/thinking[_ ]level.*not supported|thinking_level is not supported/.test(msg)) return '模型不接受显式思考等级';
+      if (/responsemodalities|response_modalities|api version|unsupported field|unknown field|unrecognized field|not supported in v1/.test(msg)) return 'API 版本或字段不兼容';
+      if (/model.*(?:does not support|is not supported).*(?:image|generatecontent)|not an image model|unsupported model|不支持图片/.test(msg)) return '模型不支持当前图片任务';
+      if (status === 404 || /model.*not found|endpoint.*not found|route.*not found|does not exist|unknown model|找不到模型|路径不存在/.test(msg)) return '模型或接口路径不存在';
+      if (status === 405 || /method not allowed/.test(msg)) return '请求方法不被接口支持';
+      if (status === 400 || /invalid[_ ]argument|bad request|unknown parameter|unsupported parameter|missing required|参数错误|参数不兼容/.test(msg)) return '请求参数或 Payload 不兼容';
+      if ([502, 521, 522, 523].includes(status) || /bad gateway|bad_response_status_code|openai_error|upstream.*(?:error|failed)/.test(msg)) return '中转站或上游网关异常';
+      if ([500, 501, 505].includes(status)) return '服务内部错误';
+      if (status === 503) return '服务暂不可用';
+      if (/响应里没有可识别的图片|no (?:valid )?(?:image|content)|no_image|empty response|仅返回文字|没有图片/.test(msg) || (status >= 200 && status < 300 && taskStatus === 'failed')) return '接口成功但无图片返回';
+      if (taskStatus === 'success') return '请求成功';
+      if (taskStatus === 'failed') return '生成失败（未识别类型）';
+      if (status >= 200 && status < 300) return '接口已返回，等待图片解析';
+      return '尚无足够诊断信息';
+    }
+    function buildDiagnostics(task, responseInfo = null, error = null) {
+      const hints = [];
+      const status = Number(responseInfo?.http_status || 0);
+      const body = responseInfo?.body || {};
+      const rootError = Array.isArray(body) ? body.find(item => item?.error)?.error : body?.error;
+      const err = rootError || {};
+      const reason = classifyTaskProblem(task, responseInfo, error);
+      const textPreview = getResponseTextPreview(responseInfo || {});
+      const signals = getResponseSignals(responseInfo || {});
+      const provider = String(task?.provider || task?.input?.apiFormat || '').toLowerCase();
+      const providerName = provider === 'vertex' ? 'Vertex' : (provider === 'gemini' ? 'Gemini' : 'OpenAI');
+
+      hints.push(`结论：${reason}`);
+      hints.push(`通道：${providerName}`);
+      if (responseInfo?.duration_seconds) hints.push(`耗时：${Number(responseInfo.duration_seconds).toFixed(1)} 秒`);
+      if (status) hints.push(`接口返回状态：${status}${responseInfo?.status_text ? ` ${responseInfo.status_text}` : ''}`);
+      const imageUsage = getImageInputTokenUsage(responseInfo || {}, task);
+      if (imageUsage) hints.push(imageUsage);
+      if (signals.finishReasons.length) hints.push(`结束原因：${signals.finishReasons.slice(0, 4).join(' / ')}`);
+      if (signals.blockReasons.length) hints.push(`拦截原因：${signals.blockReasons.slice(0, 4).join(' / ')}`);
+      if (err?.status || err?.type || err?.code) hints.push(`错误类型：${[err.status, err.type, err.code].filter(Boolean).join(' / ')}`);
+      if (responseInfo?.vertex_project_id) hints.push(`Vertex 项目：${responseInfo.vertex_project_id}${responseInfo.vertex_key_slot ? `（密钥池 ${responseInfo.vertex_key_slot}）` : ''}`);
+      if (Number(responseInfo?.retry_attempt || 0) > 0) hints.push(`429 自动重试：已重试 ${responseInfo.retry_attempt}/${responseInfo.max_429_retries || MAX_429_RETRIES} 次`);
+      if (responseInfo?.request_id) hints.push(`排查 ID：${responseInfo.request_id}`);
+      if (responseInfo?.upstream_request_id) hints.push(`上游排查 ID：${responseInfo.upstream_request_id}`);
+      if (responseInfo?.parse_error) hints.push(`响应解析异常：${responseInfo.parse_error}`);
+
+      const suggestions = {
+        '内容被安全策略拦截': '建议：根据“返回文本摘要 / 结束原因”修改提示词或参考图；若是文字拒绝，减少容易触发策略的身份替换、版权清除或高风险描述。',
+        '浏览器网络或 CORS 错误': '建议：确认 Base URL 可在浏览器直连且允许当前页面跨域；HTTPS 页面不要请求 HTTP 地址，并检查代理、防火墙与证书。',
+        '客户端配置错误': '建议：检查 Base URL、API 版本、模型 ID 和密钥格式。Vertex 密钥池必须为 KEY|PROJECT_ID，每行一组。',
+        'API Key 无效或未提供': '建议：重新复制对应通道的 Key。Gemini 的 AIza… Key 与 Vertex / Agent Platform 的 AQ.… Key 不可混用。',
+        '权限、项目或 API 未启用': '建议：Vertex 请检查 PROJECT_ID、模型访问权限以及 aiplatform.googleapis.com 是否启用；中转站请检查分组和模型权限。',
+        '账单、余额或付费状态异常': '建议：检查项目账单、API 余额或中转站账户余额，恢复后再重试。',
+        '服务端 HTTP 429（RESOURCE_EXHAUSTED）': '建议：这是 Vertex 服务端容量型 429。工作台会对当前任务指数退避、加入随机抖动并轮换项目凭据；同一资源仍持续拥塞时请降低并发。',
+        '请求或上游超时': '建议：并发数调为 1，降低输出尺寸或参考图体积；若仍超时，检查渠道排队和上游状态。',
+        '服务过载或排队拥堵': '建议：暂停队列后稍等，再以较低并发继续；必要时切换通道。',
+        '请求体或参考图过大': '建议：开启输入图优化、降低参考图最长边或减少参考图数量。',
+        '图片格式不支持或文件损坏': '建议：把参考图重新导出为 PNG/JPEG/WebP 后上传，避免损坏文件或不常见编码。',
+        '模型不接受显式思考等级': `建议：Gemini 3 Pro Image 当前端点拒绝显式 thinkingLevel。V3 会在最终发送边界强制删除 thinkingConfig；若 RAW 中仍出现该字段，说明请求来自旧标签页或旧版历史。当前构建：${APP_BUILD_ID}。`,
+        'API 版本或字段不兼容': '建议：Gemini Developer API 图片接口使用 v1beta；Vertex 项目级接口使用 v1 / global，Express 通道兼容 v1beta1。',
+        '模型不支持当前图片任务': '建议：改用模型预设中的图片模型，或确认中转站已映射该模型的图像能力。',
+        '模型或接口路径不存在': '建议：检查模型 ID、Base URL 与接口模式；Vertex 密钥池使用 projects/{project}/locations/global/...:streamGenerateContent，默认 Key 使用 Express 路径。',
+        '请求方法不被接口支持': '建议：当前工作台固定发送 POST；请检查 Base URL 是否已经包含了多余的完整接口路径。',
+        '请求参数或 Payload 不兼容': `建议：V3 强制包含 responseModalities，并对 Gemini 3 Pro Image 删除 thinkingConfig；所有解析精度均写入图片 Part。请检查 RAW 的 workbench_build 是否为 ${APP_BUILD_ID}。`,
+        '响应格式或 JSON 解析异常': '建议：接口可能返回了 HTML、网关错误页或流式文本；检查 Base URL、接口模式和中转站日志。',
+        '中转站或上游网关异常': '建议：查看中转站后台日志和上游排查 ID；真实错误可能被网关包装。',
+        '服务内部错误': '建议：这是服务端 5xx；稍后重试，持续出现时携带排查 ID 联系渠道。',
+        '服务暂不可用': '建议：服务当前不可用或正在维护；稍后重试或切换通道。',
+        '接口成功但无图片返回': '建议：接口返回了 2xx，但没有图片字段。检查返回文本、结束原因、模型图片能力和当前通道是否匹配。',
+        '生成失败（未识别类型）': '建议：复制本诊断与脱敏 RAW，结合响应文本、HTTP 状态和排查 ID 继续定位。'
+      };
+      if (suggestions[reason]) hints.push(suggestions[reason]);
+      if (textPreview) hints.push(`返回文本摘要：${sanitizeSensitiveString(textPreview).replace(/\s+/g, ' ').slice(0, 260)}`);
+      return hints.slice(0, 14);
+    }
+
+    async function prepareTaskRequestAttempt(input) {
+      let built;
+      let fetchUrl = '';
+      let displayUrl = '';
+      let vertexCredential = null;
+      const headers = {};
+
+      if (input.apiFormat === 'openai') {
+        const apiKey = getProviderApiKey('openai');
+        if (!apiKey) throw new Error('缺少 OpenAI API Key');
+        displayUrl = `${endpointBaseFromInput(input)}${endpointPathFromInput(input)}`;
+        fetchUrl = displayUrl;
+        headers.Authorization = `Bearer ${apiKey}`;
+        built = input.apiMode === 'chat' ? await buildOpenAIChatRequestFromInput(input) : await buildOpenAIImageRequestFromInput(input);
+      } else if (input.apiFormat === 'vertex') {
+        vertexCredential = getNextVertexCredential();
+        if (!vertexCredential?.key) throw new Error('Vertex 未配置有效 Key：请填写默认 API Key，或按 KEY|PROJECT_ID 每行一组配置密钥池');
+        displayUrl = `${endpointBaseFromInput(input, vertexCredential)}${endpointPathFromInput(input, vertexCredential)}`;
+        fetchUrl = displayUrl;
+        built = await buildVertex49RequestFromInput(input, displayUrl);
+        const host = (input.baseUrl || '').trim().replace(/^https?:\/\//, '').split('/')[0].toLowerCase();
+        const isOfficialVertex = host === 'aiplatform.googleapis.com';
+        if (isOfficialVertex && vertexCredential.projectId) {
+          // 项目级 Vertex 端点使用 query key；日志只保存 displayUrl，不保存真实 fetchUrl。
+          fetchUrl = `${displayUrl}?key=${encodeURIComponent(vertexCredential.key)}`;
+        } else if (isOfficialVertex) {
+          headers['x-goog-api-key'] = vertexCredential.key;
+        } else {
+          headers.Authorization = `Bearer ${vertexCredential.key}`;
+        }
+        built.requestPreview.endpoint = displayUrl;
+        built.requestPreview.vertex = {
+          endpoint_mode: usesVertexExpressEndpoint(vertexCredential) ? 'express' : 'project-stream',
+          location: vertexCredential.projectId ? 'global' : '(Express)',
+          project_id: vertexCredential.projectId || '(Express Key 自动关联)',
+          key_source: vertexCredential.source,
+          key_slot: vertexCredential.slot ? `${vertexCredential.slot}/${vertexCredential.total}` : '默认 Key'
+        };
+      } else {
+        const apiKey = getProviderApiKey('gemini');
+        if (!apiKey) throw new Error('缺少 Gemini API Key');
+        displayUrl = `${endpointBaseFromInput(input)}${endpointPathFromInput(input)}`;
+        fetchUrl = displayUrl;
+        built = await buildGeminiRequestFromInput(input, displayUrl);
+        const host = (input.baseUrl || '').trim().replace(/^https?:\/\//, '').split('/')[0].toLowerCase();
+        if (host === 'generativelanguage.googleapis.com') headers['x-goog-api-key'] = apiKey;
+        else headers.Authorization = `Bearer ${apiKey}`;
+      }
+      if (input.apiFormat === 'vertex' || input.apiFormat === 'gemini') {
+        finalizeGoogleBuiltRequest(built, input);
+      }
+      Object.assign(headers, built.headers || {});
+      return { built, fetchUrl, displayUrl, headers, vertexCredential };
+    }
+
+    async function executeTask(taskId, dispatchDelayMs = 0) {
+      const task = state.tasks.find(t => t.id === taskId);
+      if (!task || task.status !== 'queued') return;
+
+      const startedAt = performance.now();
+      let controller = null;
+      let timeoutId = null;
+      let timedOut = false;
+      let activeTimeoutMs = DEFAULT_REQUEST_TIMEOUT_MS;
+      let activeTimeoutLabel = 'API';
+
+      updateTask(taskId, { status: 'requesting', startedAt: Date.now(), finishedAt: 0, error: '', retryMessage: '', retryAttempt: 0 });
+
+      try {
+        if (dispatchDelayMs > 0) {
+          controller = new AbortController();
+          state.controllerMap.set(taskId, controller);
+          syncRunControls();
+          await waitWithAbort(dispatchDelayMs, controller.signal);
+        }
+        const input = task.input || await captureCurrentInputSnapshot();
+        const isVertex = input.apiFormat === 'vertex';
+        const taskTimeoutMs = Math.max(30 * 1000, Math.min(1800 * 1000, Number(input.requestTimeoutMs || DEFAULT_REQUEST_TIMEOUT_MS)));
+        activeTimeoutLabel = isVertex ? 'Vertex' : 'API';
+        const maxAttempts = 1 + MAX_429_RETRIES;
+
+        for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+          const elapsedMs = performance.now() - startedAt;
+          if (elapsedMs >= taskTimeoutMs) {
+            throw new Error(`${activeTimeoutLabel} 单任务总等待已达到 ${Math.round(taskTimeoutMs / 1000)} 秒，已停止继续占用队列`);
+          }
+
+          const prepared = await prepareTaskRequestAttempt(input);
+          const { built, fetchUrl, displayUrl, headers, vertexCredential } = prepared;
+          built.requestPreview.retry = { attempt, max_attempts: maxAttempts };
+          updateTask(taskId, {
+            request: redact({ endpoint: displayUrl, headers, payload: built.requestPreview }),
+            status: 'requesting',
+            retryMessage: '',
+            retryAttempt: attempt - 1
+          });
+
+          controller = new AbortController();
+          state.controllerMap.set(taskId, controller);
+          syncRunControls();
+          timedOut = false;
+          activeTimeoutMs = Math.max(1000, taskTimeoutMs - (performance.now() - startedAt));
+          timeoutId = setTimeout(() => {
+            timedOut = true;
+            try { controller.abort(); } catch {}
+          }, activeTimeoutMs);
+
+          const res = await fetch(fetchUrl, { method: 'POST', headers, body: built.body, signal: controller.signal });
+          updateTask(taskId, { status: 'receiving' });
+
+          const parsed = await parseJsonResponse(res);
+          if (timeoutId) { clearTimeout(timeoutId); timeoutId = null; }
+          const data = parsed.data;
+          const durationNow = (performance.now() - startedAt) / 1000;
+          const responseInfo = {
+            ok: res.ok,
+            http_status: res.status,
+            status_text: res.statusText,
+            headers: redact(parsed.headers),
+            content_type: parsed.contentType,
+            parse_error: parsed.parseError,
+            request_id: parsed.headers['x-request-id'] || parsed.headers['request-id'] || data?.request_id || data?.id || '',
+            upstream_request_id: parsed.headers['x-upstream-request-id'] || data?.upstream_request_id || '',
+            raw_text_preview: sanitizeSensitiveString((parsed.rawText || '').slice(0, 12000)),
+            raw_text_length: (parsed.rawText || '').length,
+            vertex_project_id: vertexCredential?.projectId || '',
+            vertex_key_slot: vertexCredential?.slot ? `${vertexCredential.slot}/${vertexCredential.total}` : '',
+            retry_attempt: attempt - 1,
+            max_429_retries: MAX_429_RETRIES,
+            body: redact(compactLargeStrings(data)),
+            duration_seconds: durationNow
+          };
+
+          if (!res.ok) {
+            const errMsg = sanitizeSensitiveString(extractError(data, res.status, parsed.rawText));
+            responseInfo.diagnostics = buildDiagnostics({ ...task, status: res.status === 429 && attempt < maxAttempts ? 'retry_wait' : 'failed' }, responseInfo, new Error(errMsg));
+            updateTask(taskId, { response: responseInfo });
+
+            if (res.status === 429 && attempt < maxAttempts) {
+              const delayMs = getRetryDelayMs(res, attempt - 1);
+              const remainingMs = taskTimeoutMs - (performance.now() - startedAt);
+              if (delayMs >= remainingMs) {
+                throw new Error(`${activeTimeoutLabel} 单任务总等待即将超过 ${Math.round(taskTimeoutMs / 1000)} 秒，已停止重试`);
+              }
+              const nextAttempt = attempt + 1;
+              const retryMessage = `429，当前任务等待 ${Math.ceil(delayMs / 1000)} 秒；随后切换下一组凭据重试 ${nextAttempt}/${maxAttempts}`;
+              updateTask(taskId, { status: 'retry_wait', error: '', retryMessage, retryAt: Date.now() + delayMs });
+              setStatus(retryMessage, 'warn');
+              await waitWithAbort(delayMs, controller.signal);
+              continue;
+            }
+
+            throw new Error(errMsg);
+          }
+
+          updateTask(taskId, { status: 'parsing' });
+          const extractedImages = extractImages(data);
+          const rawImages = ['gemini', 'vertex'].includes(input.apiFormat) ? selectFinalGeminiImage(extractedImages) : extractedImages;
+          const duration = (performance.now() - startedAt) / 1000;
+          responseInfo.duration_seconds = duration;
+
+          if (!rawImages.length) {
+            responseInfo.diagnostics = buildDiagnostics({ ...task, status: 'failed' }, responseInfo, new Error('响应里没有可识别的图片'));
+            updateTask(taskId, { response: responseInfo });
+            const maybeText = sanitizeSensitiveString(JSON.stringify(data).slice(0, 220));
+            throw new Error(`响应里没有可识别的图片：${maybeText}`);
+          }
+
+          const images = await prepareTaskImagesForStorage(taskId, rawImages);
+          responseInfo.diagnostics = buildDiagnostics({ ...task, status: 'success' }, responseInfo, null);
+          updateTask(taskId, { status: 'success', images, duration, finishedAt: Date.now(), error: '', retryMessage: '', response: responseInfo }, { immediate: true });
+          setStatus(`任务 #${task.index} 完成${attempt > 1 ? `（第 ${attempt} 次请求成功）` : ''}`, 'ok');
+          autoSaveTaskImages(taskId).catch(e => {
+            const current = state.tasks.find(t => t.id === taskId);
+            if (current) {
+              current.localSave = { ok: false, message: `自动保存失败：${e?.message || e}` };
+              markTaskStorageDirty(current);
+            }
+            requestTaskRender();
+            requestPersistSnapshot(false);
+            setStatus(`自动保存失败：${e?.message || e}`, 'warn');
+          });
+          return;
+        }
+      } catch (err) {
+        if (timeoutId) { clearTimeout(timeoutId); timeoutId = null; }
+        const duration = (performance.now() - startedAt) / 1000;
+        const current = state.tasks.find(t => t.id === taskId) || task;
+
+        if (err.name === 'AbortError' && !timedOut) {
+          const errorText = current?.status === 'cancelled' ? (current.error || '已取消排队') : '用户停止';
+          const diagResponse = current?.response ? { ...current.response } : { body: {}, headers: {}, raw_text_preview: '', duration_seconds: duration };
+          diagResponse.duration_seconds = duration;
+          diagResponse.diagnostics = buildDiagnostics(current, diagResponse, err);
+          updateTask(taskId, { status: current?.status === 'cancelled' ? 'cancelled' : 'stopped', error: errorText, retryMessage: '', duration, finishedAt: Date.now(), response: diagResponse });
+        } else {
+          const message = sanitizeSensitiveString(timedOut ? `请求超时：本次 ${activeTimeoutLabel} 等待超过 ${Math.round(activeTimeoutMs / 1000)} 秒` : (err.message || '请求失败'));
+          const diagResponse = current?.response ? { ...current.response } : { body: {}, headers: {}, raw_text_preview: '', duration_seconds: duration };
+          diagResponse.duration_seconds = duration;
+          diagResponse.diagnostics = buildDiagnostics({ ...current, status: 'failed', error: message }, diagResponse, new Error(message));
+          updateTask(taskId, { status: 'failed', error: message, retryMessage: '', duration, finishedAt: Date.now(), response: diagResponse });
+          setStatus(message, 'error');
+        }
+      } finally {
+        if (timeoutId) clearTimeout(timeoutId);
+        state.controllerMap.delete(taskId);
+        requestPersistSnapshot(true);
+        scheduleQueue();
+        if (!state.queuePaused && !getQueuedTasks().length && !state.controllerMap.size) {
+          setStatus('当前队列已处理完成', 'ok');
+        }
+      }
+    }
+
+    async function runBatch() {
+      captureCurrentProviderSettings();
+      requestSettingsSave();
+      const prompt = els.prompt.value.trim();
+      if (state.apiFormat === 'vertex') {
+        const parsedKeys = parseVertexKeys(els.vertexKeys?.value || state.vertexKeysRaw);
+        if (!parsedKeys.items.length && !getProviderApiKey('vertex')) {
+          const detail = parsedKeys.invalidLines.length ? `；第 ${parsedKeys.invalidLines.join('、')} 行不是 KEY|PROJECT_ID` : '';
+          return setStatus(`请填写 Vertex 默认 API Key 或有效密钥池${detail}`, 'error');
+        }
+      } else if (!getProviderApiKey(state.apiFormat)) {
+        return setStatus('请先填写 API Key', 'error');
+      }
+      if (!prompt) return setStatus('请先输入提示词', 'error');
+      const batchCount = getConfiguredTaskCount();
+      setStatus('正在加入队列...', 'muted');
+      const inputSnapshot = await captureCurrentInputSnapshot();
+      const startIndex = state.nextTaskIndex;
+      state.nextTaskIndex += batchCount;
+      const newTasks = Array.from({ length: batchCount }, (_, i) => createTask(startIndex + i, inputSnapshot));
+      state.tasks.unshift(...newTasks.reverse());
+      state.renderLimit = Math.max(INITIAL_RENDER_LIMIT, Math.min(state.tasks.length, batchCount + 8));
+      renderTasks();
+      requestPersistSnapshot(true);
+      syncRunControls();
+      setStatus(`已加入队列 ${batchCount} 个任务，当前排队 ${getQueuedTasks().length} 个`, 'ok');
+      scheduleQueue();
+    }
+
+    async function retryTask(taskId) {
+      const task = state.tasks.find(t => t.id === taskId);
+      if (!task) return;
+      if (task.input) {
+        const format = ['gemini', 'vertex'].includes(task.input.apiFormat) ? task.input.apiFormat : 'openai';
+        const normalizedConnection = normalizeConnectionProfile(format, task.input);
+        task.input = {
+          ...task.input,
+          baseUrl: normalizedConnection.baseUrl,
+          apiVersion: normalizedConnection.apiVersion,
+          apiMode: normalizedConnection.apiMode
+        };
+      }
+      const storedFiles = task.input?.files || [];
+      const needsReferenceRestore = storedFiles.some(file => !String(file.dataUrl || '').startsWith('data:image/'));
+      if (needsReferenceRestore) {
+        const currentInput = await captureCurrentInputSnapshot();
+        task.input = { ...task.input, files: currentInput.files };
+        markTaskStorageDirty(task);
+      }
+      updateTask(taskId, {
+        status: 'queued',
+        error: '',
+        images: [],
+        response: null,
+        request: null,
+        duration: 0,
+        startedAt: 0,
+        finishedAt: 0,
+        queueSeq: state.nextQueueSeq++
+      });
+      setStatus(`任务 #${task.index} 已重新加入队列`, 'ok');
+      scheduleQueue();
+    }
+    function cancelQueuedTask(taskId) {
+      const task = state.tasks.find(t => t.id === taskId);
+      if (!task || task.status !== 'queued') return;
+      updateTask(taskId, { status: 'cancelled', error: '已取消排队，未发送请求', finishedAt: Date.now() });
+      setStatus('已取消排队，不消耗 API', 'ok');
+    }
+    function cancelRunningTask(taskId) {
+      const ctrl = state.controllerMap.get(taskId);
+      if (!ctrl) return;
+      try { ctrl.abort(); } catch {}
+      setStatus('已尝试取消运行中的任务；若请求已发出，可能仍会计费', 'warn');
+    }
+    function toggleQueuePause() {
+      state.queuePaused = !state.queuePaused;
+      requestPersistSnapshot(true);
+      syncRunControls();
+      if (state.queuePaused) {
+        setStatus('队列已暂停；新任务会保留在队列中，未发送前不消耗 API', 'warn');
+      } else {
+        setStatus('队列已继续', 'ok');
+        scheduleQueue();
+      }
+    }
+    function cancelAllQueued() {
+      const queued = getQueuedTasks();
+      if (!queued.length) return setStatus('当前没有排队任务', 'muted');
+      queued.forEach(task => {
+        task.status = 'cancelled';
+        task.error = '已取消排队，未发送请求';
+        task.finishedAt = Date.now();
+        markTaskStorageDirty(task);
+      });
+      renderTasks();
+      requestPersistSnapshot(true);
+      syncRunControls();
+      setStatus(`已取消 ${queued.length} 个排队任务，不消耗 API`, 'ok');
+    }
+    function deleteTask(taskId) {
+      const task = state.tasks.find(t => t.id === taskId);
+      const ctrl = state.controllerMap.get(taskId);
+      if (ctrl) {
+        try { ctrl.abort(); } catch {}
+        state.controllerMap.delete(taskId);
+      }
+      deleteImageKeys(collectImageKeys(task ? [task] : []));
+      state.tasks = state.tasks.filter(t => t.id !== taskId);
+      renderTasks();
+      requestPersistSnapshot(true);
+      syncRunControls();
+      scheduleQueue();
+    }
+    function stopAll() {
+      state.tasks.forEach(task => {
+        if (task.status === 'queued') {
+          task.status = 'cancelled';
+          task.error = '已取消排队，未发送请求';
+          task.finishedAt = Date.now();
+          markTaskStorageDirty(task);
+        }
+      });
+      state.controllerMap.forEach(ctrl => { try { ctrl.abort(); } catch {} });
+      renderTasks();
+      requestPersistSnapshot(true);
+      syncRunControls();
+      setStatus('已停止运行中的任务，并取消全部排队任务', 'warn');
+    }
+
+    function getViewerItems() {
+      const items = [];
+      state.tasks.forEach(task => {
+        (task.images || []).forEach((img, imageIndex) => {
+          items.push({
+            ...img,
+            taskId: task.id,
+            taskIndex: task.index,
+            imageIndex,
+            format: img.format || 'png',
+            provider: task.provider || 'image'
+          });
+        });
+      });
+      return items;
+    }
+    function openImageViewer(taskId, imageIndex = 0) {
+      const items = getViewerItems();
+      if (!items.length) return;
+      let idx = items.findIndex(item => item.taskId === taskId && Number(item.imageIndex) === Number(imageIndex));
+      if (idx < 0) idx = 0;
+      state.viewer.items = items;
+      state.viewer.index = idx;
+      state.viewer.zoom = 1;
+      state.viewer.fitZoom = 1;
+      els.imageViewerModal.classList.remove('hidden');
+      renderImageViewer(true);
+    }
+    function releaseViewerObjectUrl() {
+      if (state.viewer.objectUrl) {
+        try { URL.revokeObjectURL(state.viewer.objectUrl); } catch {}
+        state.viewer.objectUrl = '';
+      }
+    }
+    function closeImageViewer() {
+      stopViewerContinuousScroll();
+      releaseViewerObjectUrl();
+      els.imageViewerModal.classList.add('hidden');
+      els.viewerImage.removeAttribute('src');
+    }
+    function currentViewerItem() {
+      return state.viewer.items[state.viewer.index] || null;
+    }
+    function updateViewerLayout() {
+      const img = els.viewerImage;
+      const canvas = els.viewerCanvas;
+      const stage = els.viewerStage;
+      if (!img || !canvas || !stage || !img.naturalWidth) return;
+
+      const displayedW = img.naturalWidth * (state.viewer.zoom || 1);
+      const displayedH = img.naturalHeight * (state.viewer.zoom || 1);
+      const pad = 32;
+
+      // 关键修复：图片放大后不能用 flex 居中，否则滚动区域顶部会不可达。
+      // 大于视口时从左上开始，小于视口时才居中。
+      canvas.style.display = 'flex';
+      canvas.style.boxSizing = 'border-box';
+      canvas.style.justifyContent = (displayedW + pad <= stage.clientWidth) ? 'center' : 'flex-start';
+      canvas.style.alignItems = (displayedH + pad <= stage.clientHeight) ? 'center' : 'flex-start';
+    }
+    function updateViewerZoomUi(centerAfter = false) {
+      const img = els.viewerImage;
+      if (!img || !img.naturalWidth) return;
+      const zoom = state.viewer.zoom || 1;
+      const pct = `${Math.round(zoom * 100)}%`;
+      if (els.viewerZoomText) els.viewerZoomText.textContent = pct;
+
+      // Use real CSS width instead of transform, so scroll area and mouse hit testing match the visible image.
+      img.style.transform = 'none';
+      img.style.width = `${Math.max(1, Math.round(img.naturalWidth * zoom))}px`;
+      img.style.height = 'auto';
+      img.style.maxWidth = 'none';
+      img.style.maxHeight = 'none';
+
+      updateViewerLayout();
+
+      if (els.viewerMeta) {
+        els.viewerMeta.textContent = `原始尺寸：${img.naturalWidth} × ${img.naturalHeight} · 当前缩放：${pct} · 滚轮可缩放，点击预览区可关闭`;
+      }
+      if (centerAfter) {
+        requestAnimationFrame(() => {
+          els.viewerStage.scrollLeft = Math.max(0, (els.viewerStage.scrollWidth - els.viewerStage.clientWidth) / 2);
+          els.viewerStage.scrollTop = Math.max(0, (els.viewerStage.scrollHeight - els.viewerStage.clientHeight) / 2);
+        });
+      }
+    }
+    function calculateFitZoom() {
+      const img = els.viewerImage;
+      const stage = els.viewerStage;
+      const nw = img.naturalWidth || 1;
+      const nh = img.naturalHeight || 1;
+      const sw = Math.max(320, (stage?.clientWidth || window.innerWidth) - 48);
+      const sh = Math.max(240, (stage?.clientHeight || window.innerHeight) - 48);
+      return Math.max(0.05, Math.min(1, sw / nw, sh / nh));
+    }
+    function fitImageToViewer() {
+      state.viewer.fitZoom = calculateFitZoom();
+      state.viewer.zoom = state.viewer.fitZoom;
+      updateViewerZoomUi(false);
+      requestAnimationFrame(() => {
+        els.viewerStage.scrollTop = 0;
+        els.viewerStage.scrollLeft = Math.max(0, (els.viewerStage.scrollWidth - els.viewerStage.clientWidth) / 2);
+      });
+    }
+    function scrollViewerStageToTop() {
+      if (!els.viewerStage) return;
+      els.viewerStage.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+    function scrollViewerStageToBottom() {
+      if (!els.viewerStage) return;
+      els.viewerStage.scrollTo({ top: els.viewerStage.scrollHeight, behavior: 'smooth' });
+    }
+
+    function scrollViewerStage(direction = 1, amount = null, behavior = 'smooth') {
+      if (!els.viewerStage) return;
+      const maxTop = Math.max(0, els.viewerStage.scrollHeight - els.viewerStage.clientHeight);
+      const step = amount == null ? Math.max(120, Math.round(els.viewerStage.clientHeight * 0.35)) : amount;
+      const nextTop = Math.max(0, Math.min(maxTop, els.viewerStage.scrollTop + direction * step));
+      els.viewerStage.scrollTo({ top: nextTop, behavior });
+    }
+    function stopViewerContinuousScroll() {
+      if (state.viewer.scrollHoldDelay) {
+        clearTimeout(state.viewer.scrollHoldDelay);
+        state.viewer.scrollHoldDelay = null;
+      }
+      if (state.viewer.scrollHoldTimer) {
+        clearInterval(state.viewer.scrollHoldTimer);
+        state.viewer.scrollHoldTimer = null;
+      }
+    }
+    function startViewerContinuousScroll(direction = 1, event = null) {
+      event?.preventDefault?.();
+      event?.stopPropagation?.();
+      if (els.imageViewerModal.classList.contains('hidden')) return;
+
+      stopViewerContinuousScroll();
+
+      // 点一下：小幅平滑滚动；长按 220ms 后：按固定间隔持续滚动。
+      scrollViewerStage(direction, Math.max(80, Math.round(els.viewerStage.clientHeight * 0.18)), 'smooth');
+
+      state.viewer.scrollHoldDelay = setTimeout(() => {
+        state.viewer.scrollHoldDelay = null;
+        state.viewer.scrollHoldTimer = setInterval(() => {
+          if (els.imageViewerModal.classList.contains('hidden')) {
+            stopViewerContinuousScroll();
+            return;
+          }
+          scrollViewerStage(direction, Math.max(18, Math.round(els.viewerStage.clientHeight * 0.045)), 'auto');
+        }, 38);
+      }, 220);
+    }
+
+    async function renderImageViewer(fit = false) {
+      const item = currentViewerItem();
+      if (!item) return;
+      const seq = ++state.viewer.loadSeq;
+      els.viewerTitle.textContent = `Task #${item.taskIndex} · 图 ${item.imageIndex + 1} / ${state.viewer.items.length}`;
+      els.viewerMeta.textContent = '原始尺寸：读取中';
+      els.viewerImage.removeAttribute('src');
+      releaseViewerObjectUrl();
+      try {
+        const loaded = await getTaskImageObjectUrl(item);
+        if (seq !== state.viewer.loadSeq) {
+          if (loaded.objectUrl) URL.revokeObjectURL(loaded.src);
+          return;
+        }
+        if (loaded.objectUrl) state.viewer.objectUrl = loaded.src;
+        els.viewerImage.onload = () => {
+          if (fit) fitImageToViewer();
+          else updateViewerZoomUi(true);
+        };
+        els.viewerImage.src = loaded.src;
+      } catch (e) {
+        els.viewerMeta.textContent = `原图读取失败：${e?.message || e}`;
+      }
+    }
+    function stepImageViewer(delta) {
+      const len = state.viewer.items.length;
+      if (!len) return;
+      state.viewer.index = (state.viewer.index + delta + len) % len;
+      state.viewer.zoom = 1;
+      state.viewer.fitZoom = 1;
+      renderImageViewer(true);
+    }
+    function zoomImageViewerByFactor(factor, centerAfter = false) {
+      const before = state.viewer.zoom || 1;
+      state.viewer.zoom = Math.max(0.05, Math.min(8, before * factor));
+      updateViewerZoomUi(centerAfter);
+    }
+    function resetImageViewerZoom() {
+      fitImageToViewer();
+    }
+
+    async function copyViewerImage() {
+      const item = currentViewerItem();
+      if (!item) return;
+      await copyTaskImage(item.taskId, item.imageIndex);
+    }
+    function downloadViewerImage() {
+      const item = currentViewerItem();
+      if (!item) return;
+      downloadTaskImage(item.taskId, item.imageIndex);
+    }
+
+    function openRawModal(taskId) {
+      const task = state.tasks.find(t => t.id === taskId);
+      if (!task) return;
+      state.activeRawTaskId = taskId;
+      els.rawModalTitle.textContent = `Task #${task.index} · ${task.provider.toUpperCase()} · ${task.status}`;
+      const diagnostics = Array.isArray(task.response?.diagnostics) ? task.response.diagnostics : buildDiagnostics(task, task.response || null, null);
+      els.rawDiag.innerHTML = diagnostics.map((item, idx) => `<div>${idx + 1}. ${escapeHtml(item)}</div>`).join('');
+      // 展示时再次脱敏，兼容旧历史记录或第三方网关回显请求头的情况。
+      els.rawReq.textContent = pretty(redact(task.request || {}));
+      els.rawRes.textContent = pretty(redact(task.response || {}));
+      els.rawModal.classList.remove('hidden');
+      els.rawModal.classList.add('flex');
+    }
+    
+    function closeRawModal() {
+      els.rawModal.classList.add('hidden');
+      els.rawModal.classList.remove('flex');
+      state.activeRawTaskId = null;
+    }
+
+    async function downloadTaskImage(taskId, index) {
+      const task = state.tasks.find(t => t.id === taskId);
+      const item = task?.images?.[index];
+      if (!item) return;
+      try {
+        const blob = await imageItemToBlob(item);
+        if (!blob) return setStatus('图片原图不存在或读取失败', 'error');
+        const a = document.createElement('a');
+        const url = URL.createObjectURL(blob);
+        a.href = url;
+        const ext = item.format === 'jpeg' ? 'jpg' : (item.format || imageFormatFromType(blob.type, 'png'));
+        a.download = `${task.provider}-task-${task.index}-image-${index + 1}.${ext}`;
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(url), 3000);
+      } catch (e) {
+        setStatus(`下载失败：${e?.message || e}`, 'error');
+      }
+    }
+    async function copyTaskImage(taskId, index) {
+      try {
+        const task = state.tasks.find(t => t.id === taskId);
+        const item = task?.images?.[index];
+        if (!item) return;
+        const blob = await imageItemToBlob(item);
+        if (!blob) return setStatus('图片原图不存在或读取失败', 'error');
+        await navigator.clipboard.write([new ClipboardItem({ [blob.type || 'image/png']: blob })]);
+        setStatus('图片已复制到剪贴板', 'ok');
+      } catch (e) {
+        setStatus('复制失败：浏览器可能不支持 ClipboardItem', 'error');
+      }
+    }
+    async function downloadTaskZip(taskId) {
+      const task = state.tasks.find(t => t.id === taskId);
+      if (!task?.images?.length) return setStatus('该任务没有可下载的图片', 'warn');
+      if (!window.JSZip) return setStatus('JSZip 未加载，无法打包', 'error');
+      const zip = new JSZip();
+      for (let i = 0; i < task.images.length; i++) {
+        const item = task.images[i];
+        const blob = await imageItemToBlob(item);
+        if (!blob) continue;
+        const ext = item.format === 'jpeg' ? 'jpg' : (item.format || imageFormatFromType(blob.type, 'png'));
+        zip.file(`task-${task.index}-image-${i + 1}.${ext}`, blob);
+      }
+      const blob = await zip.generateAsync({ type: 'blob' });
+      const a = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      a.href = url;
+      a.download = `task-${task.index}-images.zip`;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 3000);
+    }
+    async function downloadAll() {
+      const imageEntries = [];
+      state.tasks.forEach(task => (task.images || []).forEach((img, idx) => imageEntries.push({ task, img, idx })));
+      if (!imageEntries.length) return setStatus('没有可下载的结果', 'warn');
+      if (!window.JSZip) return setStatus('JSZip 未加载，无法打包', 'error');
+      const zip = new JSZip();
+      for (const { task, img, idx } of imageEntries) {
+        const blob = await imageItemToBlob(img);
+        if (!blob) continue;
+        const ext = img.format === 'jpeg' ? 'jpg' : (img.format || imageFormatFromType(blob.type, 'png'));
+        zip.file(`task-${String(task.index).padStart(2, '0')}-image-${String(idx + 1).padStart(2, '0')}.${ext}`, blob);
+      }
+      const blob = await zip.generateAsync({ type: 'blob' });
+      const a = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      a.href = url;
+      a.download = `image-workbench-results-${new Date().toISOString().replace(/[:.]/g, '-')}.zip`;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 3000);
+    }
+    function trimHistory(keep = 30) {
+      const before = state.tasks.length;
+      if (before <= keep) {
+        setStatus(`当前只有 ${before} 条记录，无需清理`, 'muted');
+        return;
+      }
+      const removed = state.tasks.slice(keep);
+      deleteImageKeys(collectImageKeys(removed));
+      state.tasks = state.tasks.slice(0, keep);
+      state.renderLimit = Math.min(INITIAL_RENDER_LIMIT, state.tasks.length);
+      renderTasks();
+      syncRunControls();
+      requestPersistSnapshot(true);
+      setStatus(`已清理旧记录，只保留最近 ${keep} 条；下次打开会更快`, 'ok');
+    }
+
+    function clearResults() {
+      state.controllerMap.forEach(ctrl => { try { ctrl.abort(); } catch {} });
+      state.controllerMap.clear();
+      deleteImageKeys(collectImageKeys(state.tasks));
+      state.tasks = [];
+      state.renderLimit = INITIAL_RENDER_LIMIT;
+      state.nextTaskIndex = 1;
+      state.nextQueueSeq = 1;
+      renderTasks();
+      syncRunControls();
+      requestPersistSnapshot(true);
+      setStatus('结果已清空');
+    }
+
+    els.saveBtn.addEventListener('click', () => saveSettings(true));
+    els.resetOfficialBtn.addEventListener('click', resetOfficialConnection);
+    els.chooseSaveDirBtn?.addEventListener('click', chooseSaveDirectory);
+    els.checkSaveDirBtn?.addEventListener('click', async () => {
+      const dir = await ensureSaveDirectoryPermission(true);
+      setStatus(dir ? `保存文件夹已授权：${state.saveDirName || dir.name}` : '保存文件夹未授权，请重新选择文件夹', dir ? 'ok' : 'warn');
+    });
+    els.clearSaveDirBtn?.addEventListener('click', clearSaveDirectoryHandle);
+    els.sidebarToggleBtn?.addEventListener('click', toggleSidebar);
+    els.sidebarPeekBtn?.addEventListener('click', () => applySidebarCollapsed(false));
+    els.showKeyBtn.addEventListener('click', () => {
+      els.apiKey.type = els.apiKey.type === 'password' ? 'text' : 'password';
+      els.showKeyBtn.textContent = els.apiKey.type === 'password' ? '显示' : '隐藏';
+    });
+    els.fmtOpenAI.addEventListener('click', () => applyApiFormat('openai'));
+    els.fmtGemini.addEventListener('click', () => applyApiFormat('gemini'));
+    els.fmtVertex.addEventListener('click', () => applyApiFormat('vertex'));
+    els.modelPreset.addEventListener('change', applyModelPreset);
+    els.model.addEventListener('input', () => {
+      updateModelSelectionUi();
+      updateEndpointBadge();
+      requestSettingsSave();
+    });
+    els.pickBtn.addEventListener('click', () => els.fileInput.click());
+    els.fileInput.addEventListener('change', e => addFiles(e.target.files));
+    els.sampleBtn.addEventListener('click', () => {
+      els.prompt.value = state.files.length
+        ? '参考上传图片中的人物主体与服装风格，保持相同气质，换成海边黄昏场景，柔和逆光，电影感，高级商业海报，细节丰富。'
+        : '一只穿着小雨衣的水獭站在霓虹灯街角，电影感，浅景深，高细节，雨夜反光路面。';
+      requestSettingsSave();
+    });
+    els.clearImagesBtn.addEventListener('click', () => {
+      state.files = [];
+      state.referenceFiles = [];
+      renderPreviews();
+      updateEndpointBadge();
+      refreshReferenceFilesCacheAndPersist();
+      setStatus('图片已清空');
+    });
+    els.trimHistoryBtn?.addEventListener('click', () => trimHistory(30));
+    els.clearResultsBtn.addEventListener('click', clearResults);
+    els.pauseQueueBtn?.addEventListener('click', toggleQueuePause);
+    els.cancelQueuedBtn?.addEventListener('click', cancelAllQueued);
+    els.runBtn.addEventListener('click', runBatch);
+    els.stopBtn.addEventListener('click', stopAll);
+    els.downloadAllBtn.addEventListener('click', downloadAll);
+    els.taskGrid.addEventListener('click', handleTaskGridClick);
+    els.taskGrid.addEventListener('keydown', handleTaskGridKeydown);
+    els.copyRawBtn.addEventListener('click', async () => {
+      await navigator.clipboard.writeText(`诊断信息\n${els.rawDiag.textContent}\n\nREQUEST\n${els.rawReq.textContent}\n\nRESPONSE\n${els.rawRes.textContent}`);
+      setStatus('原始数据已复制', 'ok');
+    });
+    els.closeRawBtn.addEventListener('click', closeRawModal);
+    els.rawModal.addEventListener('click', (e) => { if (e.target === els.rawModal) closeRawModal(); });
+
+    els.viewerCloseBtn.addEventListener('click', closeImageViewer);
+    els.imageViewerModal.addEventListener('click', (e) => { if (e.target === els.imageViewerModal) closeImageViewer(); });
+    els.viewerStage.addEventListener('click', (e) => {
+      if (els.imageViewerModal.classList.contains('hidden')) return;
+      // 点击预览区域等同 Esc：快速退出。工具栏按钮不受影响。
+      closeImageViewer();
+    });
+    els.viewerPrevBtn.addEventListener('click', () => stepImageViewer(-1));
+    els.viewerNextBtn.addEventListener('click', () => stepImageViewer(1));
+    els.viewerZoomOutBtn.addEventListener('click', () => zoomImageViewerByFactor(0.85, false));
+    els.viewerZoomInBtn.addEventListener('click', () => zoomImageViewerByFactor(1.18, false));
+    els.viewerZoomResetBtn.addEventListener('click', resetImageViewerZoom);
+    els.viewerScrollUpBtn.addEventListener('pointerdown', (e) => startViewerContinuousScroll(-1, e));
+    els.viewerScrollDownBtn.addEventListener('pointerdown', (e) => startViewerContinuousScroll(1, e));
+    ['pointerup','pointerleave','pointercancel','lostpointercapture'].forEach(evt => {
+      els.viewerScrollUpBtn.addEventListener(evt, stopViewerContinuousScroll);
+      els.viewerScrollDownBtn.addEventListener(evt, stopViewerContinuousScroll);
+    });
+    window.addEventListener('pointerup', stopViewerContinuousScroll);
+    els.viewerScrollUpBtn.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') startViewerContinuousScroll(-1, e);
+    });
+    els.viewerScrollDownBtn.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') startViewerContinuousScroll(1, e);
+    });
+    els.viewerScrollUpBtn.addEventListener('keyup', stopViewerContinuousScroll);
+    els.viewerScrollDownBtn.addEventListener('keyup', stopViewerContinuousScroll);
+    els.viewerCopyBtn.addEventListener('click', copyViewerImage);
+    els.viewerDownloadBtn.addEventListener('click', downloadViewerImage);
+    els.viewerStage.addEventListener('wheel', (e) => {
+      if (els.imageViewerModal.classList.contains('hidden')) return;
+      // 预览窗口内任意位置滚轮都用于缩放；避免滚动穿透。
+      e.preventDefault();
+      zoomImageViewerByFactor(e.deltaY < 0 ? 1.12 : 0.89, false);
+    }, { passive: false });
+    window.addEventListener('resize', () => {
+      if (!els.imageViewerModal.classList.contains('hidden')) fitImageToViewer();
+    });
+    document.addEventListener('keydown', (e) => {
+      if (els.imageViewerModal.classList.contains('hidden')) return;
+      if (e.key === 'Escape') closeImageViewer();
+      if (e.key === 'ArrowLeft') stepImageViewer(-1);
+      if (e.key === 'ArrowRight') stepImageViewer(1);
+      if (e.key === 'ArrowUp') { e.preventDefault(); scrollViewerStage(-1, Math.max(80, Math.round(els.viewerStage.clientHeight * 0.22)), 'smooth'); }
+      if (e.key === 'ArrowDown') { e.preventDefault(); scrollViewerStage(1, Math.max(80, Math.round(els.viewerStage.clientHeight * 0.22)), 'smooth'); }
+      if (e.key === '+' || e.key === '=') zoomImageViewerByFactor(1.18, false);
+      if (e.key === '-' || e.key === '_') zoomImageViewerByFactor(0.85, false);
+      if (e.key === '0') resetImageViewerZoom();
+    });
+
+    ['baseUrl','apiVersion','size','customW','customH'].forEach(k => els[k].addEventListener('input', updateEndpointBadge));
+    els.parallelCount.addEventListener('input', scheduleQueue);
+    els.apiMode.addEventListener('change', () => {
+      captureCurrentProviderSettings(state.apiFormat);
+      requestSettingsSave();
+      updateModeUi();
+      updateEndpointBadge();
+    });
+    els.size.addEventListener('change', updateCustomSize);
+    ['customW','customH'].forEach(k => els[k].addEventListener('input', () => {
+      if (els.size.value !== 'auto') els.size.value = 'custom';
+      updateEndpointBadge();
+    }));
+    els.apiKey.addEventListener('input', () => {
+      if (state.apiFormat !== 'gemini') return;
+      if (!/^AQ\.[A-Za-z0-9._-]{12,}$/.test(els.apiKey.value.trim()) || !isOfficialGeminiBaseUrl(els.baseUrl.value)) return;
+      const detectedKey = els.apiKey.value.trim();
+      state.connectionByFormat.vertex = { ...DEFAULT_CONNECTIONS.vertex, apiKey: detectedKey };
+      applyApiFormat('vertex');
+      setStatus('检测到 Vertex / Agent Platform Express Key，已切换到 Vertex 通道', 'ok');
+    });
+    els.vertexKeys?.addEventListener('input', () => {
+      state.vertexKeysRaw = els.vertexKeys.value;
+      state.vertexKeyIndex = 0;
+      updateVertexKeysUi();
+      updateEndpointBadge();
+      requestSettingsSave();
+    });
+    [
+      els.baseUrl, els.apiVersion, els.apiMode, els.chatExtraParams, els.apiKey,
+      els.model, els.quality, els.n, els.taskCount, els.parallelCount, els.requestTimeout, els.outputFormat, els.size,
+      els.customW, els.customH, els.compression, els.background, els.stream,
+      els.optimizeInput, els.maxEdge, els.inputQuality, els.mediaResolution, els.autoSaveImages,
+      els.saveNamePrefix, els.prompt
+    ].filter(Boolean).forEach(element => {
+      const eventName = element.matches('select, input[type="checkbox"]') ? 'change' : 'input';
+      element.addEventListener(eventName, requestSettingsSave);
+    });
+
+    ['dragenter','dragover'].forEach(evt => els.dropZone.addEventListener(evt, e => {
+      e.preventDefault();
+      if (state.referenceDragIndex != null) {
+        e.stopPropagation();
+        return;
+      }
+      els.dropZone.classList.add('drop-active');
+    }));
+    ['dragleave','drop'].forEach(evt => els.dropZone.addEventListener(evt, e => {
+      e.preventDefault();
+      els.dropZone.classList.remove('drop-active');
+    }));
+    els.dropZone.addEventListener('drop', e => {
+      if (state.referenceDragIndex != null) {
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
+      addFiles(e.dataTransfer.files);
+    });
+
+    window.addEventListener('paste', e => {
+      const pasted = Array.from(e.clipboardData?.items || []).filter(item => item.type.startsWith('image/')).map(item => item.getAsFile()).filter(Boolean);
+      if (pasted.length) addFiles(pasted);
+    });
+    window.addEventListener('beforeunload', () => {
+      saveSettings(false);
+      if (state.persistTimer) {
+        clearTimeout(state.persistTimer);
+        state.persistTimer = null;
+        persistSnapshot();
+      }
+    });
+
+
+    function startTaskHealthWatcher() {
+      setInterval(() => {
+        if (els.imageViewerModal && !els.imageViewerModal.classList.contains('hidden')) return;
+        let changed = false;
+        const now = Date.now();
+        state.tasks.forEach(task => {
+          if (['requesting', 'retry_wait', 'receiving', 'parsing'].includes(task.status) && !state.controllerMap.has(task.id)) {
+            task.status = 'failed';
+            task.error = task.error || '任务异常中断';
+            task.finishedAt = now;
+            markTaskStorageDirty(task);
+            changed = true;
+          }
+        });
+        if (changed) {
+          renderTasks();
+          syncRunControls();
+          requestPersistSnapshot(true);
+          scheduleQueue();
+        } else if (!state.queuePaused && getQueuedTasks().length && getTaskStats().running < getConcurrencyLimit()) {
+          scheduleQueue();
+        }
+      }, 5000);
+    }
+
+    initSidebarState();
+    loadSettings();
+    renderTasks();
+    syncRunControls();
+    restoreSaveDirectoryHandle();
+    restoreSnapshot();
+    startTaskHealthWatcher();
+  </script>
+</body>
+</html>
